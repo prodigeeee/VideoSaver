@@ -44,6 +44,8 @@ fun VideoPlayerScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     var showRatioPicker by remember { mutableStateOf(false) }
+    val inPip = com.example.videosaver.isInPipMode()
+    val showControls = state.showControls && !inPip
 
     LaunchedEffect(playlist, startIndex) {
         vm.loadPlaylist(playlist, startIndex)
@@ -111,7 +113,7 @@ fun VideoPlayerScreen(
 
         // ── Gradient overlays (top + bottom) ──────────────────────────────────
         AnimatedVisibility(
-            visible = state.showControls,
+            visible = showControls,
             enter   = fadeIn(),
             exit    = fadeOut(tween(600)),
             modifier = Modifier.fillMaxSize(),
@@ -142,7 +144,7 @@ fun VideoPlayerScreen(
 
         // ── Controls overlay ──────────────────────────────────────────────────
         AnimatedVisibility(
-            visible = state.showControls,
+            visible = showControls,
             enter   = fadeIn(),
             exit    = fadeOut(tween(600)),
             modifier = Modifier.fillMaxSize(),

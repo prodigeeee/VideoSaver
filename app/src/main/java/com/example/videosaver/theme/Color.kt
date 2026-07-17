@@ -29,3 +29,16 @@ val TextDisabled      = Color(0xFF4A4540)   // Disabled / placeholder
 val GlassWhite        = Color(0x12FFFFFF)   // Glassmorphism card fill
 val GlassBorder       = Color(0x1AFFFFFF)  // Glassmorphism card border
 val GlassAmber        = Color(0x18E8A84A)   // Amber-tinted glass
+
+// ─── Light Theme Variants ───────────────────────────────────────────────────
+val BackgroundLight       = Color(0xFFF7F7F9)
+val SurfaceLight          = Color(0xFFFFFFFF)
+val SurfaceMidLight       = Color(0xFFEFEFF2)
+val SurfaceHighlightLight = Color(0xFFE4E4E8)
+
+val TextPrimaryLight      = Color(0xFF141416)
+val TextSecondaryLight    = Color(0xFF64646A)
+val TextDisabledLight     = Color(0xFF9898A0)
+
+val GlassWhiteLight       = Color(0x50FFFFFF)
+val GlassBorderLight      = Color(0x1A000000)

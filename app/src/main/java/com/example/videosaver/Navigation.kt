@@ -45,6 +45,26 @@ private data class NavItem(
 )
 
 @Composable
+fun isInPipMode(): Boolean {
+    val activity = LocalContext.current as? androidx.activity.ComponentActivity ?: return false
+    var pipMode by remember { mutableStateOf(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) activity.isInPictureInPictureMode else false) }
+    DisposableEffect(activity) {
+        val listener = androidx.core.util.Consumer<androidx.core.app.PictureInPictureModeChangedInfo> { info ->
+            pipMode = info.isInPictureInPictureMode
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            activity.addOnPictureInPictureModeChangedListener(listener)
+        }
+        onDispose {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                activity.removeOnPictureInPictureModeChangedListener(listener)
+            }
+        }
+    }
+    return pipMode
+}
+
+@Composable
 fun MainNavigation() {
     var currentRoute    by remember { mutableStateOf<Any>(Home) }
     var videoPlayerDest by remember { mutableStateOf<VideoPlayer?>(null) }
@@ -64,6 +84,12 @@ fun MainNavigation() {
         lastPlayerDest = videoPlayerDest
     }
 
+    LaunchedEffect(videoPlayerDest) {
+        MainActivity.isVideoPlayerActive = videoPlayerDest != null
+    }
+
+    val inPip = isInPipMode()
+
     var audioOffsetX by remember { mutableFloatStateOf(0f) }
     var audioOffsetY by remember { mutableFloatStateOf(0f) }
 
@@ -71,11 +97,13 @@ fun MainNavigation() {
         Scaffold(
             containerColor = Background,
             bottomBar = {
-                PremiumBottomBar(
-                    items        = navItems,
-                    currentRoute = currentRoute,
-                    onSelect     = { currentRoute = it },
-                )
+                if (!inPip) {
+                    PremiumBottomBar(
+                        items        = navItems,
+                        currentRoute = currentRoute,
+                        onSelect     = { currentRoute = it },
+                    )
+                }
             },
         ) { innerPadding ->
             Box(modifier = Modifier.padding(innerPadding)) {
@@ -136,7 +164,7 @@ fun MainNavigation() {
         // ── Mini Audio Player ──────────────────────────────────────────────────
         val audioPlayerBottomPadding = if (videoPlayerDest != null) 120.dp else 70.dp
         AnimatedVisibility(
-            visible = audioState.isVisible,
+            visible = audioState.isVisible && !inPip,
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             modifier = Modifier

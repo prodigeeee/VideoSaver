@@ -42,6 +42,7 @@ fun SettingsScreen(
         context.getSharedPreferences("videosaver_prefs", android.content.Context.MODE_PRIVATE)
     }
     var showHiddenFiles by remember { mutableStateOf(prefs.getBoolean("show_hidden_files", false)) }
+    var themePref by remember { mutableStateOf(prefs.getString("theme_pref", "system") ?: "system") }
 
     var isUpdating    by remember { mutableStateOf(false) }
     var updateMessage by remember { mutableStateOf<String?>(null) }
@@ -244,6 +245,73 @@ fun SettingsScreen(
                         checkedTrackColor = Amber.copy(alpha = 0.5f),
                     )
                 )
+            }
+            Spacer(Modifier.height(16.dp))
+            Divider(color = GlassBorder)
+            Spacer(Modifier.height(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.Palette, null, tint = Amber, modifier = Modifier.size(28.dp))
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Thème de l'application", style = MaterialTheme.typography.titleMedium)
+                    Spacer(Modifier.height(8.dp))
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        SegmentedButton(
+                            selected = themePref == "light",
+                            onClick = {
+                                themePref = "light"
+                                prefs.edit().putString("theme_pref", "light").apply()
+                            },
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                            colors = SegmentedButtonDefaults.colors(
+                                activeContainerColor = AmberGlow,
+                                activeContentColor = Amber,
+                                inactiveContainerColor = Color.Transparent,
+                                inactiveContentColor = TextSecondary,
+                                activeBorderColor = AmberDim,
+                                inactiveBorderColor = GlassBorder
+                            )
+                        ) {
+                            Text("Clair")
+                        }
+                        SegmentedButton(
+                            selected = themePref == "system",
+                            onClick = {
+                                themePref = "system"
+                                prefs.edit().putString("theme_pref", "system").apply()
+                            },
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                            colors = SegmentedButtonDefaults.colors(
+                                activeContainerColor = AmberGlow,
+                                activeContentColor = Amber,
+                                inactiveContainerColor = Color.Transparent,
+                                inactiveContentColor = TextSecondary,
+                                activeBorderColor = AmberDim,
+                                inactiveBorderColor = GlassBorder
+                            )
+                        ) {
+                            Text("Système")
+                        }
+                        SegmentedButton(
+                            selected = themePref == "dark",
+                            onClick = {
+                                themePref = "dark"
+                                prefs.edit().putString("theme_pref", "dark").apply()
+                            },
+                            shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                            colors = SegmentedButtonDefaults.colors(
+                                activeContainerColor = AmberGlow,
+                                activeContentColor = Amber,
+                                inactiveContainerColor = Color.Transparent,
+                                inactiveContentColor = TextSecondary,
+                                activeBorderColor = AmberDim,
+                                inactiveBorderColor = GlassBorder
+                            )
+                        ) {
+                            Text("Sombre")
+                        }
+                    }
+                }
             }
         }
 
