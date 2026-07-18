@@ -1,7 +1,5 @@
 package com.example.videosaver.ui.player
 
-import android.app.Activity
-import android.content.pm.ActivityInfo
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import androidx.activity.compose.BackHandler
@@ -48,17 +46,9 @@ fun VideoPlayerScreen(
     var showRatioPicker by remember { mutableStateOf(false) }
     val inPip = com.example.videosaver.isInPipMode()
     val showControls = state.showControls && !inPip
-    val context = LocalContext.current
 
-    // Force landscape orientation for video playback
     DisposableEffect(Unit) {
-        val activity = context as? Activity
-        val originalOrientation = activity?.requestedOrientation
-        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        onDispose {
-            activity?.requestedOrientation = originalOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            vm.player.pause()
-        }
+        onDispose { vm.player.pause() }
     }
 
     LaunchedEffect(playlist, startIndex) {
