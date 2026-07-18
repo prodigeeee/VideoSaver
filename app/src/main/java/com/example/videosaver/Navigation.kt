@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
@@ -163,14 +164,14 @@ fun MainNavigation() {
         }
 
         // ── Mini Audio Player ──────────────────────────────────────────────────
-        val audioPlayerBottomPadding = if (videoPlayerDest != null) 120.dp else 70.dp
+        val audioPlayerBottomPadding = if (videoPlayerDest != null) 130.dp else 80.dp
         AnimatedVisibility(
             visible = audioState.isVisible && !inPip,
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = audioPlayerBottomPadding)
+                .padding(bottom = audioPlayerBottomPadding, start = 12.dp, end = 12.dp)
                 .offset { IntOffset(audioOffsetX.roundToInt(), audioOffsetY.roundToInt()) }
                 .pointerInput(Unit) {
                     detectDragGestures { change, dragAmount ->
@@ -190,6 +191,7 @@ fun MainNavigation() {
                 onSkipBackward = audioVm::skipBackward,
                 onCycleLoop = audioVm::cycleLoopMode,
                 onClose = audioVm::stopAndHide,
+                onVolumeChange = audioVm::setVolume,
             )
         }
     }
@@ -208,59 +210,64 @@ private fun MiniAudioPlayer(
     onSkipBackward: () -> Unit,
     onCycleLoop: () -> Unit,
     onClose: () -> Unit,
+    onVolumeChange: (Float) -> Unit,
 ) {
     val progress = if (state.duration > 0) state.position.toFloat() / state.duration else 0f
+    var showVolume by remember { mutableStateOf(false) }
 
+    // Pill / gélule shape — fully rounded, works anywhere on screen
     Surface(
         color = SurfaceMid.copy(alpha = 0.97f),
-        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        shape = RoundedCornerShape(24.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder),
         modifier = Modifier.fillMaxWidth(),
-        shadowElevation = 12.dp,
+        shadowElevation = 16.dp,
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp)
-                .padding(top = 10.dp, bottom = 6.dp),
+                .padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
-            // ── Row 1 : icon + title + time + close ──────────────────────────
+            // ── Row 1 : icon + title + time + close ───────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Animated music icon
+                // Music icon badge
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(30.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(AmberGlow),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(Icons.Rounded.MusicNote, null, tint = Amber, modifier = Modifier.size(20.dp))
+                    Icon(Icons.Rounded.MusicNote, null, tint = Amber, modifier = Modifier.size(16.dp))
                 }
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(8.dp))
 
                 // Title
                 Text(
                     text = state.title,
-                    style = MaterialTheme.typography.bodyMedium.copy(color = TextPrimary),
+                    style = MaterialTheme.typography.bodySmall.copy(color = TextPrimary),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                Spacer(Modifier.width(8.dp))
+                Spacer(Modifier.width(6.dp))
 
                 // Time display
                 Text(
                     text = "${formatAudioMs(state.position)} / ${formatAudioMs(state.duration)}",
-                    style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        color = TextSecondary,
+                        fontSize = 9.sp,
+                    ),
                 )
-                Spacer(Modifier.width(4.dp))
+                Spacer(Modifier.width(2.dp))
 
                 // Close
-                IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Rounded.Close, null, tint = TextSecondary, modifier = Modifier.size(16.dp))
+                IconButton(onClick = onClose, modifier = Modifier.size(24.dp)) {
+                    Icon(Icons.Rounded.Close, null, tint = TextSecondary, modifier = Modifier.size(14.dp))
                 }
             }
 
@@ -270,82 +277,95 @@ private fun MiniAudioPlayer(
                 onValueChange = onSeek,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(24.dp),
+                    .height(20.dp),
                 colors = SliderDefaults.colors(
                     thumbColor = Amber,
                     activeTrackColor = Amber,
-                    inactiveTrackColor = AmberDim.copy(alpha = 0.25f),
+                    inactiveTrackColor = AmberDim.copy(alpha = 0.2f),
                 ),
             )
 
-            // ── Row 2 : playback controls ─────────────────────────────────────
+            // ── Row 2 : controls + volume ──────────────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                // Loop button
-                IconButton(onClick = onCycleLoop, modifier = Modifier.size(36.dp)) {
+                // Loop
+                IconButton(onClick = onCycleLoop, modifier = Modifier.size(30.dp)) {
                     val tint = if (state.loopMode == LoopMode.OFF) TextSecondary else Amber
-                    val icon = when (state.loopMode) {
-                        LoopMode.OFF -> Icons.Rounded.Repeat
-                        LoopMode.ONE -> Icons.Rounded.RepeatOne
-                        LoopMode.ALL -> Icons.Rounded.Repeat
-                    }
-                    Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
+                    val icon = if (state.loopMode == LoopMode.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat
+                    Icon(icon, null, tint = tint, modifier = Modifier.size(15.dp))
                 }
 
                 // Previous
-                IconButton(onClick = onPrevious, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.SkipPrevious, null, tint = TextPrimary, modifier = Modifier.size(22.dp))
+                IconButton(onClick = onPrevious, modifier = Modifier.size(30.dp)) {
+                    Icon(Icons.Rounded.SkipPrevious, null, tint = TextPrimary, modifier = Modifier.size(18.dp))
                 }
 
-                // Skip backward -10s
-                IconButton(onClick = onSkipBackward, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Replay10, null, tint = TextPrimary, modifier = Modifier.size(22.dp))
+                // Skip -10s
+                IconButton(onClick = onSkipBackward, modifier = Modifier.size(30.dp)) {
+                    Icon(Icons.Rounded.Replay10, null, tint = TextPrimary, modifier = Modifier.size(18.dp))
                 }
 
-                // Play / Pause (main)
+                // Play / Pause
                 Surface(
                     onClick = onTogglePlay,
-                    color = Amber.copy(0.15f),
+                    color = Amber.copy(0.18f),
                     shape = CircleShape,
-                    modifier = Modifier.size(44.dp),
+                    modifier = Modifier.size(36.dp),
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                             contentDescription = null,
                             tint = Amber,
-                            modifier = Modifier.size(28.dp),
+                            modifier = Modifier.size(22.dp),
                         )
                     }
                 }
 
-                // Skip forward +10s
-                IconButton(onClick = onSkipForward, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.Forward10, null, tint = TextPrimary, modifier = Modifier.size(22.dp))
+                // Skip +10s
+                IconButton(onClick = onSkipForward, modifier = Modifier.size(30.dp)) {
+                    Icon(Icons.Rounded.Forward10, null, tint = TextPrimary, modifier = Modifier.size(18.dp))
                 }
 
                 // Next
-                IconButton(onClick = onNext, modifier = Modifier.size(36.dp)) {
-                    Icon(Icons.Rounded.SkipNext, null, tint = TextPrimary, modifier = Modifier.size(22.dp))
+                IconButton(onClick = onNext, modifier = Modifier.size(30.dp)) {
+                    Icon(Icons.Rounded.SkipNext, null, tint = TextPrimary, modifier = Modifier.size(18.dp))
                 }
 
-                // Playlist count badge
-                if (state.playlist.size > 1) {
-                    Surface(
-                        color = GlassWhite,
-                        shape = RoundedCornerShape(6.dp),
-                    ) {
-                        Text(
-                            "${state.currentIndex + 1}/${state.playlist.size}",
-                            style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary),
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                        )
-                    }
-                } else {
-                    Spacer(Modifier.size(36.dp)) // balance layout
+                Spacer(Modifier.weight(1f))
+
+                // Volume toggle + inline slider
+                AnimatedVisibility(visible = showVolume) {
+                    Slider(
+                        value = state.volume,
+                        onValueChange = onVolumeChange,
+                        modifier = Modifier.width(72.dp).height(20.dp),
+                        colors = SliderDefaults.colors(
+                            thumbColor = Amber,
+                            activeTrackColor = Amber,
+                            inactiveTrackColor = AmberDim.copy(0.2f),
+                        ),
+                    )
+                }
+                if (showVolume) Spacer(Modifier.width(4.dp))
+
+                // Volume icon (toggle)
+                IconButton(
+                    onClick = { showVolume = !showVolume },
+                    modifier = Modifier.size(30.dp),
+                ) {
+                    Icon(
+                        imageVector = when {
+                            state.volume == 0f -> Icons.Rounded.VolumeOff
+                            state.volume < 0.5f -> Icons.Rounded.VolumeDown
+                            else -> Icons.Rounded.VolumeUp
+                        },
+                        contentDescription = "Volume",
+                        tint = if (showVolume) Amber else TextSecondary,
+                        modifier = Modifier.size(16.dp),
+                    )
                 }
             }
         }
