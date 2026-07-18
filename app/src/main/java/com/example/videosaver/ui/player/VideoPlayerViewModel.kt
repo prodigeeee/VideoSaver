@@ -74,16 +74,15 @@ class VideoPlayerViewModel(context: Context) : ViewModel() {
             }
         }
 
-        // Auto-hide controls after 3s
-        viewModelScope.launch {
-            _state.mapLatest { it.showControls }.collectLatest { visible ->
-                if (visible) {
-                    delay(3500)
-                    _state.update { it.copy(showControls = false) }
-                }
+        // Show controls briefly when playback state changes (play/pause)
+        player.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                showControls()
             }
-        }
+        })
     }
+
+    private var autoHideJob: kotlinx.coroutines.Job? = null
 
     /** Load a playlist starting at [startIndex] */
     fun loadPlaylist(files: List<MediaFile>, startIndex: Int = 0) {
@@ -97,6 +96,7 @@ class VideoPlayerViewModel(context: Context) : ViewModel() {
             currentIndex = startIndex,
             title        = files.getOrNull(startIndex)?.name ?: "",
         )}
+        showControls() // Start auto-hide timer immediately
     }
 
     fun togglePlayPause() = if (player.isPlaying) player.pause() else player.play()
@@ -139,6 +139,11 @@ class VideoPlayerViewModel(context: Context) : ViewModel() {
 
     fun showControls() {
         _state.update { it.copy(showControls = true) }
+        autoHideJob?.cancel()
+        autoHideJob = viewModelScope.launch {
+            delay(3500)
+            _state.update { it.copy(showControls = false) }
+        }
     }
 
     override fun onCleared() {

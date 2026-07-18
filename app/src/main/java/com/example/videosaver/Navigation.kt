@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
@@ -169,7 +170,7 @@ fun MainNavigation() {
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = audioPlayerBottomPadding) // Adjust for VideoPlayer controls
+                .padding(bottom = audioPlayerBottomPadding)
                 .offset { IntOffset(audioOffsetX.roundToInt(), audioOffsetY.roundToInt()) }
                 .pointerInput(Unit) {
                     detectDragGestures { change, dragAmount ->
@@ -183,9 +184,12 @@ fun MainNavigation() {
                 state = audioState,
                 onTogglePlay = audioVm::togglePlayPause,
                 onNext = audioVm::playNext,
+                onPrevious = audioVm::playPrevious,
+                onSeek = { audioVm.seekTo((it * audioState.duration).toLong()) },
+                onSkipForward = audioVm::skipForward,
+                onSkipBackward = audioVm::skipBackward,
                 onCycleLoop = audioVm::cycleLoopMode,
                 onClose = audioVm::stopAndHide,
-                onVolumeChange = audioVm::setVolume
             )
         }
     }
@@ -198,87 +202,163 @@ private fun MiniAudioPlayer(
     state: AudioPlayerUiState,
     onTogglePlay: () -> Unit,
     onNext: () -> Unit,
+    onPrevious: () -> Unit,
+    onSeek: (Float) -> Unit,
+    onSkipForward: () -> Unit,
+    onSkipBackward: () -> Unit,
     onCycleLoop: () -> Unit,
     onClose: () -> Unit,
-    onVolumeChange: (Float) -> Unit,
 ) {
+    val progress = if (state.duration > 0) state.position.toFloat() / state.duration else 0f
+
     Surface(
-        color = SurfaceMid.copy(alpha = 0.95f),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
+        color = SurfaceMid.copy(alpha = 0.97f),
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         border = androidx.compose.foundation.BorderStroke(1.dp, GlassBorder),
         modifier = Modifier.fillMaxWidth(),
+        shadowElevation = 12.dp,
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .padding(horizontal = 14.dp)
+                .padding(top = 10.dp, bottom = 6.dp),
         ) {
-            // Icon
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(AmberGlow),
-                contentAlignment = Alignment.Center
+            // ── Row 1 : icon + title + time + close ──────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Rounded.MusicNote, null, tint = Amber, modifier = Modifier.size(24.dp))
-            }
-            Spacer(Modifier.width(12.dp))
-            
-            // Title & progress
-            Column(modifier = Modifier.weight(1f)) {
+                // Animated music icon
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(AmberGlow),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Rounded.MusicNote, null, tint = Amber, modifier = Modifier.size(20.dp))
+                }
+                Spacer(Modifier.width(10.dp))
+
+                // Title
                 Text(
                     text = state.title,
                     style = MaterialTheme.typography.bodyMedium.copy(color = TextPrimary),
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
                 )
-                val progress = if (state.duration > 0) state.position.toFloat() / state.duration else 0f
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier.fillMaxWidth().height(2.dp).padding(top = 4.dp).clip(RoundedCornerShape(1.dp)),
-                    color = Amber,
-                    trackColor = AmberDim.copy(alpha = 0.3f),
+                Spacer(Modifier.width(8.dp))
+
+                // Time display
+                Text(
+                    text = "${formatAudioMs(state.position)} / ${formatAudioMs(state.duration)}",
+                    style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary),
                 )
-                Spacer(Modifier.height(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.VolumeUp, null, tint = TextSecondary, modifier = Modifier.size(12.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Slider(
-                        value = state.volume,
-                        onValueChange = onVolumeChange,
-                        modifier = Modifier.fillMaxWidth().height(16.dp),
-                        colors = SliderDefaults.colors(
-                            thumbColor = Amber, activeTrackColor = Amber, inactiveTrackColor = AmberDim.copy(0.3f)
-                        )
-                    )
+                Spacer(Modifier.width(4.dp))
+
+                // Close
+                IconButton(onClick = onClose, modifier = Modifier.size(28.dp)) {
+                    Icon(Icons.Rounded.Close, null, tint = TextSecondary, modifier = Modifier.size(16.dp))
                 }
             }
-            Spacer(Modifier.width(8.dp))
-            
-            // Controls
-            IconButton(onClick = onCycleLoop, modifier = Modifier.size(32.dp)) {
-                val tint = if (state.loopMode == LoopMode.OFF) TextSecondary else Amber
-                val icon = if (state.loopMode == LoopMode.ONE) Icons.Rounded.RepeatOne else Icons.Rounded.Repeat
-                Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))
-            }
-            IconButton(onClick = onNext, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Rounded.SkipNext, null, tint = TextPrimary, modifier = Modifier.size(20.dp))
-            }
-            IconButton(onClick = onTogglePlay, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    imageVector = if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                    contentDescription = null,
-                    tint = Amber,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-            IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Rounded.Close, null, tint = TextSecondary, modifier = Modifier.size(20.dp))
+
+            // ── Seek slider ────────────────────────────────────────────────────
+            Slider(
+                value = progress,
+                onValueChange = onSeek,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(24.dp),
+                colors = SliderDefaults.colors(
+                    thumbColor = Amber,
+                    activeTrackColor = Amber,
+                    inactiveTrackColor = AmberDim.copy(alpha = 0.25f),
+                ),
+            )
+
+            // ── Row 2 : playback controls ─────────────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                // Loop button
+                IconButton(onClick = onCycleLoop, modifier = Modifier.size(36.dp)) {
+                    val tint = if (state.loopMode == LoopMode.OFF) TextSecondary else Amber
+                    val icon = when (state.loopMode) {
+                        LoopMode.OFF -> Icons.Rounded.Repeat
+                        LoopMode.ONE -> Icons.Rounded.RepeatOne
+                        LoopMode.ALL -> Icons.Rounded.Repeat
+                    }
+                    Icon(icon, null, tint = tint, modifier = Modifier.size(18.dp))
+                }
+
+                // Previous
+                IconButton(onClick = onPrevious, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.SkipPrevious, null, tint = TextPrimary, modifier = Modifier.size(22.dp))
+                }
+
+                // Skip backward -10s
+                IconButton(onClick = onSkipBackward, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.Replay10, null, tint = TextPrimary, modifier = Modifier.size(22.dp))
+                }
+
+                // Play / Pause (main)
+                Surface(
+                    onClick = onTogglePlay,
+                    color = Amber.copy(0.15f),
+                    shape = CircleShape,
+                    modifier = Modifier.size(44.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                            contentDescription = null,
+                            tint = Amber,
+                            modifier = Modifier.size(28.dp),
+                        )
+                    }
+                }
+
+                // Skip forward +10s
+                IconButton(onClick = onSkipForward, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.Forward10, null, tint = TextPrimary, modifier = Modifier.size(22.dp))
+                }
+
+                // Next
+                IconButton(onClick = onNext, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Rounded.SkipNext, null, tint = TextPrimary, modifier = Modifier.size(22.dp))
+                }
+
+                // Playlist count badge
+                if (state.playlist.size > 1) {
+                    Surface(
+                        color = GlassWhite,
+                        shape = RoundedCornerShape(6.dp),
+                    ) {
+                        Text(
+                            "${state.currentIndex + 1}/${state.playlist.size}",
+                            style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                        )
+                    }
+                } else {
+                    Spacer(Modifier.size(36.dp)) // balance layout
+                }
             }
         }
     }
+}
+
+private fun formatAudioMs(ms: Long): String {
+    if (ms <= 0L) return "0:00"
+    val s = ms / 1000
+    val m = s / 60
+    val h = m / 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m % 60, s % 60)
+    else "%d:%02d".format(m, s % 60)
 }
 
 // ─── Premium Bottom Bar ───────────────────────────────────────────────────────

@@ -76,6 +76,16 @@ class AudioPlayerViewModel(context: Context) : ViewModel() {
 
     fun togglePlayPause() = if (player.isPlaying) player.pause() else player.play()
 
+    fun seekTo(posMs: Long) { player.seekTo(posMs) }
+
+    fun skipForward(ms: Long = 10_000L) {
+        player.seekTo((player.currentPosition + ms).coerceAtMost(player.duration.coerceAtLeast(0L)))
+    }
+
+    fun skipBackward(ms: Long = 10_000L) {
+        player.seekTo((player.currentPosition - ms).coerceAtLeast(0L))
+    }
+
     fun playNext() { if (player.hasNextMediaItem()) player.seekToNextMediaItem() }
     
     fun playPrevious() { if (player.hasPreviousMediaItem()) player.seekToPreviousMediaItem() }
