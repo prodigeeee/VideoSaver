@@ -7,6 +7,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -47,6 +48,11 @@ fun VideoPlayerScreen(
     val inPip = com.example.videosaver.isInPipMode()
     val showControls = state.showControls && !inPip
 
+    // ── Pinch-to-zoom state ───────────────────────────────────────────────
+    var zoomScale by remember { mutableFloatStateOf(1f) }
+    var offsetX   by remember { mutableFloatStateOf(0f) }
+    var offsetY   by remember { mutableFloatStateOf(0f) }
+
     DisposableEffect(Unit) {
         onDispose { vm.player.pause() }
     }
@@ -61,25 +67,47 @@ fun VideoPlayerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            // 1) Transform gestures : pinch-to-zoom + pan while zoomed
             .pointerInput(Unit) {
-                detectVerticalDragGestures { change, dragAmount ->
-                    if (dragAmount > 40f) {
-                        onBack()
+                detectTransformGestures { _, pan, zoom, _ ->
+                    val newZoom = (zoomScale * zoom).coerceIn(1f, 3f)
+                    zoomScale = newZoom
+                    if (newZoom > 1.01f) {
+                        val maxOffX = size.width  * (newZoom - 1f) / 2f
+                        val maxOffY = size.height * (newZoom - 1f) / 2f
+                        offsetX = (offsetX + pan.x).coerceIn(-maxOffX, maxOffX)
+                        offsetY = (offsetY + pan.y).coerceIn(-maxOffY, maxOffY)
+                    } else {
+                        zoomScale = 1f; offsetX = 0f; offsetY = 0f
                     }
                 }
             }
+            // 2) Swipe down to close (only when not zoomed)
+            .pointerInput(Unit) {
+                detectVerticalDragGestures { _, dragAmount ->
+                    if (zoomScale <= 1.01f && dragAmount > 40f) onBack()
+                }
+            }
+            // 3) Tap : show controls / Double-tap : toggle play or reset zoom
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = { vm.showControls() },
-                    onDoubleTap = { vm.togglePlayPause() },
+                    onDoubleTap = {
+                        if (zoomScale > 1.01f) {
+                            zoomScale = 1f; offsetX = 0f; offsetY = 0f
+                        } else {
+                            vm.togglePlayPause()
+                        }
+                    },
                 )
             },
     ) {
-        // ── ExoPlayer Surface ──────────────────────────────────────────────────
+        // ── ExoPlayer Surface ────────────────────────────────────────────────
+        // FILL uses RESIZE_MODE_ZOOM : crop centred, original ratio always preserved
         val resizeMode = when (state.aspectRatio) {
-            AspectRatioMode.FIT      -> AspectRatioFrameLayout.RESIZE_MODE_FIT
-            AspectRatioMode.FILL     -> AspectRatioFrameLayout.RESIZE_MODE_FILL
-            AspectRatioMode.ZOOM     -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            AspectRatioMode.FIT        -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+            AspectRatioMode.FILL       -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            AspectRatioMode.ZOOM       -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
             AspectRatioMode.RATIO_16_9 -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH
             AspectRatioMode.RATIO_4_3  -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT
             AspectRatioMode.RATIO_1_1  -> AspectRatioFrameLayout.RESIZE_MODE_FIT
@@ -88,9 +116,9 @@ fun VideoPlayerScreen(
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
-                    player       = vm.player
-                    useController = false // we draw our own controls
-                    layoutParams = FrameLayout.LayoutParams(
+                    player        = vm.player
+                    useController = false
+                    layoutParams  = FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT,
                     )
@@ -98,10 +126,17 @@ fun VideoPlayerScreen(
                 }
             },
             update = { it.setResizeMode(resizeMode) },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX       = zoomScale
+                    scaleY       = zoomScale
+                    translationX = offsetX
+                    translationY = offsetY
+                },
         )
 
-        // ── Buffering indicator ────────────────────────────────────────────────
+        // ── Buffering indicator ───────────────────────────────────────────────
         if (state.isBuffering) {
             CircularProgressIndicator(
                 color = Amber,
@@ -109,7 +144,7 @@ fun VideoPlayerScreen(
             )
         }
 
-        // ── Gradient overlays (top + bottom) ──────────────────────────────────
+        // ── Gradient overlays (top + bottom) ───────────────────────────────────
         AnimatedVisibility(
             visible = showControls,
             enter   = fadeIn(),
@@ -117,37 +152,26 @@ fun VideoPlayerScreen(
             modifier = Modifier.fillMaxSize(),
         ) {
             Box(Modifier.fillMaxSize()) {
-                // Top gradient
                 Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(120.dp)
-                        .align(Alignment.TopCenter)
-                        .background(
-                            Brush.verticalGradient(listOf(Color.Black.copy(0.75f), Color.Transparent))
-                        )
+                    Modifier.fillMaxWidth().height(120.dp).align(Alignment.TopCenter)
+                        .background(Brush.verticalGradient(listOf(Color.Black.copy(0.75f), Color.Transparent)))
                 )
-                // Bottom gradient
                 Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(200.dp)
-                        .align(Alignment.BottomCenter)
-                        .background(
-                            Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.85f)))
-                        )
+                    Modifier.fillMaxWidth().height(200.dp).align(Alignment.BottomCenter)
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.85f))))
                 )
             }
         }
 
-        // ── Controls overlay ──────────────────────────────────────────────────
+        // ── Controls overlay ───────────────────────────────────────────────────
         AnimatedVisibility(
             visible = showControls,
             enter   = fadeIn(),
             exit    = fadeOut(tween(600)),
             modifier = Modifier.fillMaxSize(),
         ) {
-            Box(modifier = Modifier.fillMaxSize().displayCutoutPadding()) {
+            // displayCutoutPadding + navigationBarsPadding avoids nav bar overlap
+            Box(modifier = Modifier.fillMaxSize().displayCutoutPadding().navigationBarsPadding()) {
 
                 // ── Top bar ──────────────────────────────────────────────────
                 Row(
@@ -176,25 +200,48 @@ fun VideoPlayerScreen(
                         }
                     }
 
+                    // Zoom level badge (shown when zoomed in)
+                    if (zoomScale > 1.05f) {
+                        Surface(
+                            color = Color.White.copy(0.18f),
+                            shape = RoundedCornerShape(6.dp),
+                        ) {
+                            Text(
+                                "×${"%.1f".format(zoomScale)}",
+                                style = MaterialTheme.typography.labelSmall.copy(color = Color.White),
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                            )
+                        }
+                        Spacer(Modifier.width(4.dp))
+                    }
+
+                    // Loop button — moved here from bottom bar to avoid Android nav bar overlap
+                    val (loopIcon, loopTint) = when (state.loopMode) {
+                        LoopMode.ONE -> Icons.Rounded.RepeatOne to Amber
+                        LoopMode.ALL -> Icons.Rounded.Repeat     to Amber
+                        LoopMode.OFF -> Icons.Rounded.Clear       to Color.White.copy(0.4f)
+                    }
+                    IconButton(onClick = vm::cycleLoopMode) {
+                        Icon(loopIcon, "Boucle", tint = loopTint)
+                    }
+
                     // Aspect ratio button
                     IconButton(onClick = { showRatioPicker = true }) {
                         Icon(Icons.Rounded.AspectRatio, "Ratio d'image", tint = Color.White)
                     }
                 }
 
-                // ── Center controls ───────────────────────────────────────────
+                // ── Center controls ──────────────────────────────────────────────
                 Row(
                     modifier = Modifier.align(Alignment.Center),
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // Previous (only if playlist)
                     if (state.totalFiles > 1) {
                         PlayerIconButton(Icons.Rounded.SkipPrevious, "Précédent", size = 36, onClick = vm::playPrevious)
                     }
                     PlayerIconButton(Icons.Rounded.Replay10, "−10s", size = 36, onClick = vm::skipBackward)
 
-                    // Play / Pause (large)
                     Surface(
                         onClick = vm::togglePlayPause,
                         color = Color.White.copy(0.15f),
@@ -217,14 +264,13 @@ fun VideoPlayerScreen(
                     }
                 }
 
-                // ── Bottom bar ────────────────────────────────────────────────
+                // ── Bottom bar (seekbar + time only — loop moved to top bar) ────────────
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .align(Alignment.BottomCenter)
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                 ) {
-                    // Seek bar
                     val progress = if (state.duration > 0) {
                         state.position.toFloat() / state.duration.toFloat()
                     } else 0f
@@ -233,45 +279,17 @@ fun VideoPlayerScreen(
                         value = progress,
                         onValueChange = { vm.seekTo((it * state.duration).toLong()) },
                         colors = SliderDefaults.colors(
-                            thumbColor        = Amber,
-                            activeTrackColor  = Amber,
+                            thumbColor         = Amber,
+                            activeTrackColor   = Amber,
                             inactiveTrackColor = Color.White.copy(0.3f),
                         ),
                         modifier = Modifier.fillMaxWidth(),
                     )
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        // Time
-                        Text(
-                            "${formatMs(state.position)} / ${formatMs(state.duration)}",
-                            style = MaterialTheme.typography.bodySmall.copy(color = Color.White.copy(0.8f)),
-                        )
-
-                        // Loop button
-                        val (loopIcon, loopTint) = when (state.loopMode) {
-                            LoopMode.OFF -> Icons.Rounded.Clear to Color.White.copy(0.4f)
-                            LoopMode.ONE -> Icons.Rounded.RepeatOne to Amber
-                            LoopMode.ALL -> Icons.Rounded.Repeat to Amber
-                        }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            // Loop label
-                            Text(
-                                when (state.loopMode) {
-                                    LoopMode.OFF -> ""
-                                    LoopMode.ONE -> "×1"
-                                    LoopMode.ALL -> "∞"
-                                },
-                                style = MaterialTheme.typography.labelSmall.copy(color = loopTint),
-                            )
-                            IconButton(onClick = vm::cycleLoopMode, modifier = Modifier.size(36.dp)) {
-                                Icon(loopIcon, "Boucle", tint = loopTint, modifier = Modifier.size(22.dp))
-                            }
-                        }
-                    }
+                    Text(
+                        "${formatMs(state.position)} / ${formatMs(state.duration)}",
+                        style = MaterialTheme.typography.bodySmall.copy(color = Color.White.copy(0.8f)),
+                    )
                 }
             }
         }

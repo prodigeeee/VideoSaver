@@ -28,7 +28,7 @@ data class PlayerUiState(
     val isPlaying: Boolean = false,
     val duration: Long = 0L,
     val position: Long = 0L,
-    val loopMode: LoopMode = LoopMode.OFF,
+    val loopMode: LoopMode = LoopMode.ONE,
     val aspectRatio: AspectRatioMode = AspectRatioMode.FIT,
     val showControls: Boolean = true,
     val currentIndex: Int = 0,
@@ -39,15 +39,19 @@ data class PlayerUiState(
 
 class VideoPlayerViewModel(context: Context) : ViewModel() {
 
-    val player: ExoPlayer = ExoPlayer.Builder(context).build()
+    val player: ExoPlayer = ExoPlayer.Builder(context)
+        .setHandleAudioBecomingNoisy(true) // pause on headphone unplug → prevents audio freeze
+        .build()
 
     private val _state = MutableStateFlow(PlayerUiState())
     val state: StateFlow<PlayerUiState> = _state.asStateFlow()
 
     init {
+        // Single listener — avoids race condition from duplicate onIsPlayingChanged calls
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _state.update { it.copy(isPlaying = isPlaying) }
+                showControls() // restart auto-hide on every play/pause
             }
             override fun onPlaybackStateChanged(playbackState: Int) {
                 _state.update { it.copy(isBuffering = playbackState == Player.STATE_BUFFERING) }
@@ -61,7 +65,7 @@ class VideoPlayerViewModel(context: Context) : ViewModel() {
             }
         })
 
-        // Position polling
+        // Position polling — delay() is non-blocking, safe on Main
         viewModelScope.launch {
             while (true) {
                 delay(500)
@@ -73,30 +77,26 @@ class VideoPlayerViewModel(context: Context) : ViewModel() {
                 }
             }
         }
-
-        // Show controls briefly when playback state changes (play/pause)
-        player.addListener(object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                showControls()
-            }
-        })
     }
 
     private var autoHideJob: kotlinx.coroutines.Job? = null
 
     /** Load a playlist starting at [startIndex] */
     fun loadPlaylist(files: List<MediaFile>, startIndex: Int = 0) {
-        val items = files.map { MediaItem.fromUri("file://${it.file.absolutePath}") }
+        // Uri.fromFile is more reliable than string "file://" for paths with special chars
+        val items = files.map { MediaItem.fromUri(android.net.Uri.fromFile(it.file)) }
         player.setMediaItems(items, startIndex, 0L)
         player.prepare()
         player.playWhenReady = true
+        player.repeatMode = Player.REPEAT_MODE_ONE // Default: loop current video
         _state.update { it.copy(
             playlist     = files,
             totalFiles   = files.size,
             currentIndex = startIndex,
             title        = files.getOrNull(startIndex)?.name ?: "",
+            loopMode     = LoopMode.ONE,
         )}
-        showControls() // Start auto-hide timer immediately
+        showControls()
     }
 
     fun togglePlayPause() = if (player.isPlaying) player.pause() else player.play()
@@ -120,15 +120,16 @@ class VideoPlayerViewModel(context: Context) : ViewModel() {
     fun playPrevious() { if (player.hasPreviousMediaItem()) player.seekToPreviousMediaItem(); showControls() }
 
     fun cycleLoopMode() {
+        // ONE (default) → ALL → OFF → ONE
         val next = when (_state.value.loopMode) {
-            LoopMode.OFF -> LoopMode.ONE
             LoopMode.ONE -> LoopMode.ALL
             LoopMode.ALL -> LoopMode.OFF
+            LoopMode.OFF -> LoopMode.ONE
         }
         player.repeatMode = when (next) {
-            LoopMode.OFF -> Player.REPEAT_MODE_OFF
             LoopMode.ONE -> Player.REPEAT_MODE_ONE
             LoopMode.ALL -> Player.REPEAT_MODE_ALL
+            LoopMode.OFF -> Player.REPEAT_MODE_OFF
         }
         _state.update { it.copy(loopMode = next) }
     }
