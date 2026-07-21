@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -136,82 +137,108 @@ fun FolderBrowserScreen(
             }
     }
 
-    Box(modifier = modifier.fillMaxSize().background(Background)) {
-        Column(modifier = Modifier.fillMaxSize()) {
+    // ── Shared media click handler (portrait + landscape) ────────────────────
+    val onMediaClick = { media: MediaFile ->
+        if (inSelectionMode) {
+            selectedMedia = if (selectedMedia.contains(media)) selectedMedia - media else selectedMedia + media
+        } else {
+            if (media.isImage) {
+                val images = sortedMedia.filter { it.isImage }
+                onPlayMedia(images, images.indexOf(media))
+            } else {
+                val videos = sortedMedia.filter { !it.isImage }
+                onPlayMedia(videos, videos.indexOf(media))
+            }
+        }
+    }
 
-            // ── Header bar ────────────────────────────────────────────────────────
-            Column(
+    // ── Orientation-adaptive layout ───────────────────────────────────────────
+    val isLandscape = LocalConfiguration.current.orientation ==
+        android.content.res.Configuration.ORIENTATION_LANDSCAPE
+
+    if (isLandscape) {
+        // ════════════════════════════════════════════════════════════════════
+        // PAYSAGE : deux panneaux côte-à-côte
+        //   Gauche  220dp  : navigation (retour, breadcrumb, dossiers)
+        //   Droite  rest   : grille média + barre compacte sur 1 ligne
+        // ════════════════════════════════════════════════════════════════════
+        Row(modifier = modifier.fillMaxSize().background(Background)) {
+
+            // ── Panneau gauche : navigation ──────────────────────────────────
+            LazyColumn(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Brush.verticalGradient(listOf(SurfaceDark, Background)))
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .width(220.dp)
+                    .fillMaxHeight()
+                    .background(SurfaceDark.copy(alpha = 0.6f)),
+                contentPadding = PaddingValues(bottom = 80.dp),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (state.breadcrumb.size > 1) {
-                        IconButton(onClick = vm::navigateUp, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Rounded.ArrowBackIosNew, "Retour", tint = Amber, modifier = Modifier.size(20.dp))
+                // En-tête compact (1 ligne)
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Brush.verticalGradient(listOf(SurfaceDark, Background)))
+                            .padding(horizontal = 8.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        if (state.breadcrumb.size > 1) {
+                            IconButton(onClick = vm::navigateUp, modifier = Modifier.size(30.dp)) {
+                                Icon(Icons.Rounded.ArrowBackIosNew, "Retour", tint = Amber, modifier = Modifier.size(15.dp))
+                            }
                         }
-                        Spacer(Modifier.width(4.dp))
-                    }
-                    Column(Modifier.weight(1f)) {
                         Text(
                             state.currentPath.name.ifBlank { "Stockage" },
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
                         )
-                        if (state.mediaInCurrentDir.isNotEmpty()) {
-                            Text(
-                                "${state.mediaInCurrentDir.count { it.isVideo }} vidéo(s) • " +
-                                "${state.mediaInCurrentDir.count { it.isImage }} image(s)",
-                                style = MaterialTheme.typography.bodySmall,
+                        IconButton(onClick = vm::toggleFavorite, modifier = Modifier.size(30.dp)) {
+                            Icon(
+                                if (state.isFavorite) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
+                                "Favori",
+                                tint = if (state.isFavorite) Amber else TextSecondary,
+                                modifier = Modifier.size(16.dp),
                             )
                         }
-                    }
-                    IconButton(onClick = vm::toggleFavorite) {
-                        Icon(
-                            if (state.isFavorite) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
-                            "Favori",
-                            tint = if (state.isFavorite) Amber else TextSecondary,
-                        )
                     }
                 }
 
-                // Breadcrumb
+                // Breadcrumb (scroll horizontal)
                 if (state.breadcrumb.size > 1) {
-                    Spacer(Modifier.height(6.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        items(state.breadcrumb) { crumb ->
-                            val isLast = crumb == state.breadcrumb.last()
-                            Text(
-                                crumb.name.take(16),
-                                style = MaterialTheme.typography.labelMedium.copy(
-                                    color = if (isLast) Amber else TextSecondary,
-                                ),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .clickable { if (!isLast) vm.navigateTo(crumb) }
-                                    .padding(horizontal = 6.dp, vertical = 2.dp),
-                            )
-                            if (!isLast) {
-                                Text("›", style = MaterialTheme.typography.labelMedium.copy(color = TextDisabled))
+                    item {
+                        LazyRow(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            items(state.breadcrumb) { crumb ->
+                                val isLast = crumb == state.breadcrumb.last()
+                                Text(
+                                    crumb.name.take(12),
+                                    style = MaterialTheme.typography.labelSmall.copy(
+                                        color = if (isLast) Amber else TextSecondary,
+                                    ),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .clickable { if (!isLast) vm.navigateTo(crumb) }
+                                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                                )
+                                if (!isLast) {
+                                    Text("›", style = MaterialTheme.typography.labelSmall.copy(color = TextDisabled))
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            LazyColumn(
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 120.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-
-                // ── Quick-access roots ─────────────────────────────────────────
+                // Emplacements rapides
                 if (state.breadcrumb.size <= 1 && vm.rootDirectories.isNotEmpty()) {
                     item {
-                        Column {
-                            Spacer(Modifier.height(8.dp))
-                            Text("Emplacements rapides", style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(Modifier.padding(horizontal = 8.dp)) {
+                            Spacer(Modifier.height(4.dp))
+                            Text("Emplacements", style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(bottom = 4.dp))
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 items(vm.rootDirectories) { root ->
                                     QuickAccessChip(root, onClick = { vm.navigateTo(root.file) })
                                 }
@@ -220,109 +247,118 @@ fun FolderBrowserScreen(
                     }
                 }
 
-                // ── Favorites ─────────────────────────────────────────────────
+                // Favoris
                 if (state.breadcrumb.size <= 1 && favorites.isNotEmpty()) {
                     item {
-                        Column {
-                            Spacer(Modifier.height(8.dp))
-                            Text("Favoris", style = MaterialTheme.typography.labelMedium,
-                                modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
-                        }
+                        Text("Favoris", style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(start = 8.dp, top = 8.dp, end = 8.dp, bottom = 4.dp))
                     }
                     items(favorites) { fav ->
-                        FavoriteRow(fav, onClick = { vm.openFavorite(fav) })
+                        Box(Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
+                            FavoriteRow(fav, onClick = { vm.openFavorite(fav) })
+                        }
                     }
                     item {
-                        HorizontalDivider(color = GlassBorder, modifier = Modifier.padding(vertical = 6.dp))
+                        HorizontalDivider(color = GlassBorder,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                     }
                 }
 
-                // ── Loading ────────────────────────────────────────────────────
+                // Chargement
                 if (state.isLoading) {
                     item {
-                        Box(Modifier.fillMaxWidth().height(120.dp), Alignment.Center) {
-                            CircularProgressIndicator(color = Amber)
+                        Box(Modifier.fillMaxWidth().height(80.dp), Alignment.Center) {
+                            CircularProgressIndicator(color = Amber, modifier = Modifier.size(24.dp))
                         }
                     }
                     return@LazyColumn
                 }
 
-                // ── Sub-folders ────────────────────────────────────────────────
+                // Dossiers
                 val dirs = state.entries.filter { it.isDirectory }
                 if (dirs.isNotEmpty()) {
                     item {
-                        Text("Dossiers (${dirs.size})",
-                            style = MaterialTheme.typography.labelMedium,
-                            modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp))
+                        Text("Dossiers (${dirs.size})", style = MaterialTheme.typography.labelSmall,
+                            modifier = Modifier.padding(start = 8.dp, top = 6.dp, end = 8.dp, bottom = 4.dp))
                     }
                     items(dirs, key = { it.file.absolutePath }) { entry ->
-                        FolderRow(entry, onClick = { vm.navigateTo(entry.file) })
+                        Box(Modifier.padding(horizontal = 8.dp, vertical = 2.dp)) {
+                            FolderRow(entry, onClick = { vm.navigateTo(entry.file) })
+                        }
                     }
                 }
 
-                // ── Media section header with controls (STICKY) ────────────────
-                if (state.mediaInCurrentDir.isNotEmpty()) {
-                    stickyHeader {
-                        Surface(color = Background.copy(alpha = 0.95f), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                            Column {
-                                Spacer(Modifier.height(12.dp))
-                                // Toolbar: filter chips
+                // Dossier vide
+                if (state.entries.isEmpty() && !state.isLoading) {
+                    item {
+                        Box(Modifier.fillMaxWidth().height(80.dp), Alignment.Center) {
+                            Text("Dossier vide", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+
+            // Séparateur vertical
+            VerticalDivider(color = GlassBorder, thickness = 1.dp)
+
+            // ── Panneau droit : grille média ─────────────────────────────────
+            Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                LazyColumn(
+                    contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 80.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    // Barre compacte UNIQUE (filtres + grille + tri sur une seule ligne)
+                    if (state.mediaInCurrentDir.isNotEmpty()) {
+                        stickyHeader {
+                            Surface(color = Background.copy(alpha = 0.95f), modifier = Modifier.fillMaxWidth()) {
                                 Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                                 ) {
-                                    listOf(null to "Tous", "video" to "Vidéos", "image" to "Images", "audio" to "Audio").forEach { (key, lbl) ->
+                                    listOf(null to "Tous", "video" to "Vidéos", "image" to "Imgs", "audio" to "♪").forEach { (key, lbl) ->
                                         FilterChip(
                                             selected = mediaFilter == key,
-                                            onClick  = { mediaFilter = key },
-                                            label    = { Text(lbl) },
-                                            colors   = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor   = AmberGlow,
-                                                selectedLabelColor       = Amber,
-                                                containerColor           = GlassWhite,
-                                                labelColor               = TextSecondary,
+                                            onClick = { mediaFilter = key },
+                                            label = { Text(lbl, style = MaterialTheme.typography.labelSmall) },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = AmberGlow,
+                                                selectedLabelColor     = Amber,
+                                                containerColor         = GlassWhite,
+                                                labelColor             = TextSecondary,
                                             ),
-                                            shape = RoundedCornerShape(8.dp),
+                                            shape = RoundedCornerShape(6.dp),
                                         )
                                     }
-                                }
-
-                                Spacer(Modifier.height(8.dp))
-
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
                                     Text(
-                                        "Médias (${sortedMedia.size})",
-                                        style = MaterialTheme.typography.labelMedium,
+                                        "${sortedMedia.size}",
+                                        style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary),
                                         modifier = Modifier.weight(1f).padding(start = 4.dp),
                                     )
-
-                                    // Grid size slider (1–4)
-                                    Icon(Icons.Rounded.GridView, null, tint = TextSecondary, modifier = Modifier.size(14.dp))
+                                    // Grille
+                                    Icon(Icons.Rounded.GridView, null, tint = TextSecondary,
+                                        modifier = Modifier.size(12.dp))
                                     Slider(
                                         value         = (5 - columns).toFloat(),
                                         onValueChange = { columns = (5 - it.toInt()).coerceIn(1, 4) },
                                         valueRange    = 1f..4f,
                                         steps         = 2,
                                         colors        = SliderDefaults.colors(
-                                            thumbColor        = Amber,
-                                            activeTrackColor  = Amber,
+                                            thumbColor         = Amber,
+                                            activeTrackColor   = Amber,
                                             inactiveTrackColor = AmberDim.copy(0.3f),
                                         ),
-                                        modifier = Modifier.width(90.dp),
+                                        modifier = Modifier.width(72.dp),
                                     )
                                     Surface(color = AmberGlow, shape = RoundedCornerShape(5.dp)) {
                                         Text("${columns}×",
                                             style = MaterialTheme.typography.labelSmall.copy(color = Amber),
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
+                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
                                     }
-
-                                    // Sort dropdown
+                                    // Tri
                                     Box {
-                                        IconButton(onClick = { showSortMenu = true }, modifier = Modifier.size(32.dp)) {
-                                            Icon(Icons.Rounded.SwapVert, "Trier", tint = Amber, modifier = Modifier.size(20.dp))
+                                        IconButton(onClick = { showSortMenu = true }, modifier = Modifier.size(28.dp)) {
+                                            Icon(Icons.Rounded.SwapVert, "Trier", tint = Amber, modifier = Modifier.size(16.dp))
                                         }
                                         DropdownMenu(
                                             expanded = showSortMenu,
@@ -344,106 +380,397 @@ fun FolderBrowserScreen(
                             }
                         }
                     }
-                }
 
-                // ── Media grid ────────────────────────────────────────────────
-                if (sortedMedia.isEmpty() && state.entries.filter { !it.isDirectory }.isNotEmpty()) {
-                    item {
-                        Box(Modifier.fillMaxWidth().height(60.dp), Alignment.Center) {
-                            Text("Aucun média dans ce dossier", style = MaterialTheme.typography.bodyMedium)
+                    // Chargement
+                    if (state.isLoading) {
+                        item {
+                            Box(Modifier.fillMaxWidth().height(120.dp), Alignment.Center) {
+                                CircularProgressIndicator(color = Amber)
+                            }
+                        }
+                        return@LazyColumn
+                    }
+
+                    // Grille médias
+                    if (sortedMedia.isEmpty() && state.entries.filter { !it.isDirectory }.isNotEmpty()) {
+                        item {
+                            Box(Modifier.fillMaxWidth().height(60.dp), Alignment.Center) {
+                                Text("Aucun média dans ce dossier", style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    } else {
+                        val rows = sortedMedia.chunked(columns)
+                        items(rows) { rowItems ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                for (media in rowItems) {
+                                    val isSelected = selectedMedia.contains(media)
+                                    Box(Modifier.weight(1f)) {
+                                        MediaGridCard(
+                                            media           = media,
+                                            columns         = columns,
+                                            isSelected      = isSelected,
+                                            inSelectionMode = inSelectionMode,
+                                            onClick         = { onMediaClick(media) },
+                                            onLongClick     = { if (!inSelectionMode) selectedMedia = selectedMedia + media },
+                                        )
+                                    }
+                                }
+                                repeat(columns - rowItems.size) { Spacer(Modifier.weight(1f)) }
+                            }
                         }
                     }
-                } else {
-                    val rows = sortedMedia.chunked(columns)
-                    items(rows) { rowItems ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                            for (media in rowItems) {
-                                val isSelected = selectedMedia.contains(media)
-                                Box(Modifier.weight(1f)) {
-                                    MediaGridCard(
-                                        media = media,
-                                        columns = columns,
-                                        isSelected = isSelected,
-                                        inSelectionMode = inSelectionMode,
-                                        onClick = {
-                                            if (inSelectionMode) {
-                                                selectedMedia = if (isSelected) selectedMedia - media else selectedMedia + media
-                                            } else {
-                                                if (media.isImage) {
-                                                    val images = sortedMedia.filter { it.isImage }
-                                                    onPlayMedia(images, images.indexOf(media))
-                                                } else {
-                                                    val videos = sortedMedia.filter { !it.isImage }
-                                                    onPlayMedia(videos, videos.indexOf(media))
-                                                }
-                                            }
-                                        },
-                                        onLongClick = {
-                                            if (!inSelectionMode) {
-                                                selectedMedia = selectedMedia + media
-                                            }
-                                        }
-                                    )
+                }
+
+                // Barre de sélection (paysage) — enveloppée dans un Box positionneur
+                // pour éviter la résolution de RowScope.AnimatedVisibility
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.BottomCenter)
+                        .padding(8.dp),
+                ) {
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = inSelectionMode,
+                        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                        exit  = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                    ) {
+                    Surface(
+                        color  = SurfaceMid.copy(alpha = 0.95f),
+                        shape  = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, GlassBorder),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            IconButton(onClick = { selectedMedia = emptySet() }) {
+                                Icon(Icons.Rounded.Close, "Annuler", tint = TextPrimary)
+                            }
+                            Text("${selectedMedia.size} sélectionné(s)", style = MaterialTheme.typography.labelLarge)
+                            Row {
+                                IconButton(onClick = { actionSheetType = "COPY" }) {
+                                    Icon(Icons.Rounded.ContentCopy, "Copier", tint = Amber)
+                                }
+                                IconButton(onClick = { actionSheetType = "MOVE" }) {
+                                    Icon(Icons.Rounded.DriveFileMove, "Déplacer", tint = Amber)
+                                }
+                                IconButton(onClick = {
+                                    vm.deleteSelected(selectedMedia.toList())
+                                    selectedMedia = emptySet()
+                                }) {
+                                    Icon(Icons.Rounded.Delete, "Supprimer", tint = ErrorRed)
                                 }
                             }
-                            // Fill empty slots in the last row
-                            repeat(columns - rowItems.size) { Spacer(Modifier.weight(1f)) }
-                        }
-                    }
-                }
-
-                // Empty dir
-                if (state.entries.isEmpty() && !state.isLoading) {
-                    item {
-                        Box(Modifier.fillMaxWidth().height(120.dp), Alignment.Center) {
-                            Text("Dossier vide", style = MaterialTheme.typography.bodyMedium)
                         }
                     }
                 }
             }
         }
+        }
+        // ── fin layout paysage ───────────────────────────────────────────────
 
-        // ── Action Bar for Selection ──────────────────────────────────────────
-        AnimatedVisibility(
-            visible = inSelectionMode,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 70.dp).padding(horizontal = 16.dp)
-        ) {
-            Surface(
-                color = SurfaceMid.copy(alpha = 0.95f),
-                shape = RoundedCornerShape(16.dp),
-                border = BorderStroke(1.dp, GlassBorder),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+    } else {
+        // ════════════════════════════════════════════════════════════════════
+        // PORTRAIT : layout existant inchangé
+        // ════════════════════════════════════════════════════════════════════
+        Box(modifier = modifier.fillMaxSize().background(Background)) {
+            Column(modifier = Modifier.fillMaxSize()) {
+
+                // ── Header bar ────────────────────────────────────────────────────────
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Brush.verticalGradient(listOf(SurfaceDark, Background)))
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
                 ) {
-                    IconButton(onClick = { selectedMedia = emptySet() }) {
-                        Icon(Icons.Rounded.Close, "Annuler", tint = TextPrimary)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (state.breadcrumb.size > 1) {
+                            IconButton(onClick = vm::navigateUp, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Rounded.ArrowBackIosNew, "Retour", tint = Amber, modifier = Modifier.size(20.dp))
+                            }
+                            Spacer(Modifier.width(4.dp))
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                state.currentPath.name.ifBlank { "Stockage" },
+                                style = MaterialTheme.typography.titleLarge,
+                            )
+                            if (state.mediaInCurrentDir.isNotEmpty()) {
+                                Text(
+                                    "${state.mediaInCurrentDir.count { it.isVideo }} vidéo(s) • " +
+                                    "${state.mediaInCurrentDir.count { it.isImage }} image(s)",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                        IconButton(onClick = vm::toggleFavorite) {
+                            Icon(
+                                if (state.isFavorite) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder,
+                                "Favori",
+                                tint = if (state.isFavorite) Amber else TextSecondary,
+                            )
+                        }
                     }
-                    Text("${selectedMedia.size} sélectionné(s)", style = MaterialTheme.typography.labelLarge)
-                    Row {
-                        IconButton(onClick = { actionSheetType = "COPY" }) {
-                            Icon(Icons.Rounded.ContentCopy, "Copier", tint = Amber)
+
+                    // Breadcrumb
+                    if (state.breadcrumb.size > 1) {
+                        Spacer(Modifier.height(6.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            items(state.breadcrumb) { crumb ->
+                                val isLast = crumb == state.breadcrumb.last()
+                                Text(
+                                    crumb.name.take(16),
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        color = if (isLast) Amber else TextSecondary,
+                                    ),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable { if (!isLast) vm.navigateTo(crumb) }
+                                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                                )
+                                if (!isLast) {
+                                    Text("›", style = MaterialTheme.typography.labelMedium.copy(color = TextDisabled))
+                                }
+                            }
                         }
-                        IconButton(onClick = { actionSheetType = "MOVE" }) {
-                            Icon(Icons.Rounded.DriveFileMove, "Déplacer", tint = Amber)
+                    }
+                }
+
+                LazyColumn(
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 120.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+
+                    // ── Quick-access roots ─────────────────────────────────────────
+                    if (state.breadcrumb.size <= 1 && vm.rootDirectories.isNotEmpty()) {
+                        item {
+                            Column {
+                                Spacer(Modifier.height(8.dp))
+                                Text("Emplacements rapides", style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    items(vm.rootDirectories) { root ->
+                                        QuickAccessChip(root, onClick = { vm.navigateTo(root.file) })
+                                    }
+                                }
+                            }
                         }
-                        IconButton(onClick = {
-                            vm.deleteSelected(selectedMedia.toList())
-                            selectedMedia = emptySet()
-                        }) {
-                            Icon(Icons.Rounded.Delete, "Supprimer", tint = ErrorRed)
+                    }
+
+                    // ── Favorites ─────────────────────────────────────────────────
+                    if (state.breadcrumb.size <= 1 && favorites.isNotEmpty()) {
+                        item {
+                            Column {
+                                Spacer(Modifier.height(8.dp))
+                                Text("Favoris", style = MaterialTheme.typography.labelMedium,
+                                    modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
+                            }
+                        }
+                        items(favorites) { fav ->
+                            FavoriteRow(fav, onClick = { vm.openFavorite(fav) })
+                        }
+                        item {
+                            HorizontalDivider(color = GlassBorder, modifier = Modifier.padding(vertical = 6.dp))
+                        }
+                    }
+
+                    // ── Loading ────────────────────────────────────────────────────
+                    if (state.isLoading) {
+                        item {
+                            Box(Modifier.fillMaxWidth().height(120.dp), Alignment.Center) {
+                                CircularProgressIndicator(color = Amber)
+                            }
+                        }
+                        return@LazyColumn
+                    }
+
+                    // ── Sub-folders ────────────────────────────────────────────────
+                    val dirs = state.entries.filter { it.isDirectory }
+                    if (dirs.isNotEmpty()) {
+                        item {
+                            Text("Dossiers (${dirs.size})",
+                                style = MaterialTheme.typography.labelMedium,
+                                modifier = Modifier.padding(start = 4.dp, top = 8.dp, bottom = 2.dp))
+                        }
+                        items(dirs, key = { it.file.absolutePath }) { entry ->
+                            FolderRow(entry, onClick = { vm.navigateTo(entry.file) })
+                        }
+                    }
+
+                    // ── Media section header with controls (STICKY) ────────────────
+                    if (state.mediaInCurrentDir.isNotEmpty()) {
+                        stickyHeader {
+                            Surface(color = Background.copy(alpha = 0.95f), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                                Column {
+                                    Spacer(Modifier.height(12.dp))
+                                    // Toolbar: filter chips
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        listOf(null to "Tous", "video" to "Vidéos", "image" to "Images", "audio" to "Audio").forEach { (key, lbl) ->
+                                            FilterChip(
+                                                selected = mediaFilter == key,
+                                                onClick  = { mediaFilter = key },
+                                                label    = { Text(lbl) },
+                                                colors   = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor   = AmberGlow,
+                                                    selectedLabelColor       = Amber,
+                                                    containerColor           = GlassWhite,
+                                                    labelColor               = TextSecondary,
+                                                ),
+                                                shape = RoundedCornerShape(8.dp),
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(Modifier.height(8.dp))
+
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Text(
+                                            "Médias (${sortedMedia.size})",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.weight(1f).padding(start = 4.dp),
+                                        )
+
+                                        // Grid size slider (1–4)
+                                        Icon(Icons.Rounded.GridView, null, tint = TextSecondary, modifier = Modifier.size(14.dp))
+                                        Slider(
+                                            value         = (5 - columns).toFloat(),
+                                            onValueChange = { columns = (5 - it.toInt()).coerceIn(1, 4) },
+                                            valueRange    = 1f..4f,
+                                            steps         = 2,
+                                            colors        = SliderDefaults.colors(
+                                                thumbColor        = Amber,
+                                                activeTrackColor  = Amber,
+                                                inactiveTrackColor = AmberDim.copy(0.3f),
+                                            ),
+                                            modifier = Modifier.width(90.dp),
+                                        )
+                                        Surface(color = AmberGlow, shape = RoundedCornerShape(5.dp)) {
+                                            Text("${columns}×",
+                                                style = MaterialTheme.typography.labelSmall.copy(color = Amber),
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
+                                        }
+
+                                        // Sort dropdown
+                                        Box {
+                                            IconButton(onClick = { showSortMenu = true }, modifier = Modifier.size(32.dp)) {
+                                                Icon(Icons.Rounded.SwapVert, "Trier", tint = Amber, modifier = Modifier.size(20.dp))
+                                            }
+                                            DropdownMenu(
+                                                expanded = showSortMenu,
+                                                onDismissRequest = { showSortMenu = false },
+                                                containerColor = SurfaceMid,
+                                            ) {
+                                                BrowserSort.entries.forEach { s ->
+                                                    DropdownMenuItem(
+                                                        text = { Text(s.label, color = if (sortBy == s) Amber else TextPrimary) },
+                                                        trailingIcon = {
+                                                            if (sortBy == s) Icon(Icons.Rounded.Check, null, tint = Amber, modifier = Modifier.size(16.dp))
+                                                        },
+                                                        onClick = { sortBy = s; showSortMenu = false },
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ── Media grid ────────────────────────────────────────────────
+                    if (sortedMedia.isEmpty() && state.entries.filter { !it.isDirectory }.isNotEmpty()) {
+                        item {
+                            Box(Modifier.fillMaxWidth().height(60.dp), Alignment.Center) {
+                                Text("Aucun média dans ce dossier", style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    } else {
+                        val rows = sortedMedia.chunked(columns)
+                        items(rows) { rowItems ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                                for (media in rowItems) {
+                                    val isSelected = selectedMedia.contains(media)
+                                    Box(Modifier.weight(1f)) {
+                                        MediaGridCard(
+                                            media           = media,
+                                            columns         = columns,
+                                            isSelected      = isSelected,
+                                            inSelectionMode = inSelectionMode,
+                                            onClick         = { onMediaClick(media) },
+                                            onLongClick     = {
+                                                if (!inSelectionMode) selectedMedia = selectedMedia + media
+                                            }
+                                        )
+                                    }
+                                }
+                                // Fill empty slots in the last row
+                                repeat(columns - rowItems.size) { Spacer(Modifier.weight(1f)) }
+                            }
+                        }
+                    }
+
+                    // Empty dir
+                    if (state.entries.isEmpty() && !state.isLoading) {
+                        item {
+                            Box(Modifier.fillMaxWidth().height(120.dp), Alignment.Center) {
+                                Text("Dossier vide", style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Action Bar for Selection ──────────────────────────────────────────
+            AnimatedVisibility(
+                visible = inSelectionMode,
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 70.dp).padding(horizontal = 16.dp)
+            ) {
+                Surface(
+                    color = SurfaceMid.copy(alpha = 0.95f),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, GlassBorder),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        IconButton(onClick = { selectedMedia = emptySet() }) {
+                            Icon(Icons.Rounded.Close, "Annuler", tint = TextPrimary)
+                        }
+                        Text("${selectedMedia.size} sélectionné(s)", style = MaterialTheme.typography.labelLarge)
+                        Row {
+                            IconButton(onClick = { actionSheetType = "COPY" }) {
+                                Icon(Icons.Rounded.ContentCopy, "Copier", tint = Amber)
+                            }
+                            IconButton(onClick = { actionSheetType = "MOVE" }) {
+                                Icon(Icons.Rounded.DriveFileMove, "Déplacer", tint = Amber)
+                            }
+                            IconButton(onClick = {
+                                vm.deleteSelected(selectedMedia.toList())
+                                selectedMedia = emptySet()
+                            }) {
+                                Icon(Icons.Rounded.Delete, "Supprimer", tint = ErrorRed)
+                            }
                         }
                     }
                 }
             }
         }
-    }
+    } // end orientation branch
 }
+
 
 // ─── Media Grid Card ──────────────────────────────────────────────────────────
 
