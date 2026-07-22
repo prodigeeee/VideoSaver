@@ -18,10 +18,10 @@ interface DownloadDao {
     @Query("SELECT * FROM downloads ORDER BY createdAt DESC")
     fun getAllDownloads(): Flow<List<DownloadEntity>>
 
-    @Query("SELECT * FROM downloads WHERE status = 'COMPLETED' ORDER BY completedAt DESC")
+    @Query("SELECT * FROM downloads WHERE status = 'COMPLETED' AND url NOT LIKE 'file://%' ORDER BY completedAt DESC")
     fun getCompletedDownloads(): Flow<List<DownloadEntity>>
 
-    @Query("SELECT * FROM downloads WHERE status = 'COMPLETED'")
+    @Query("SELECT * FROM downloads WHERE tags IS NOT NULL AND tags != '[]'")
     suspend fun getCompletedDownloadsList(): List<DownloadEntity>
 
     @Query("SELECT * FROM downloads WHERE status IN ('PENDING', 'FETCHING_INFO', 'DOWNLOADING') ORDER BY createdAt ASC")
