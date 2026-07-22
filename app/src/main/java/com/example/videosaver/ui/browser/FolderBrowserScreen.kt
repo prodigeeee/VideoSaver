@@ -105,6 +105,7 @@ fun FolderBrowserScreen(
     val inSelectionMode = selectedMedia.isNotEmpty()
     var actionSheetType by remember { mutableStateOf<String?>(null) } // "COPY" or "MOVE"
     var tagDialogMedia by remember { mutableStateOf<MediaFile?>(null) }
+    var showMultiTagDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.currentPath) {
         selectedMedia = emptySet()
@@ -117,6 +118,21 @@ fun FolderBrowserScreen(
             onSave = { newTags ->
                 vm.updateFileTags(tagDialogMedia!!, newTags)
                 tagDialogMedia = null
+            }
+        )
+    }
+
+    if (showMultiTagDialog && selectedMedia.isNotEmpty()) {
+        val initialTags = remember(selectedMedia) {
+            selectedMedia.flatMap { it.tags }.distinct().sorted()
+        }
+        com.example.videosaver.ui.library.TagEditDialog(
+            initialTags = initialTags,
+            onDismiss = { showMultiTagDialog = false },
+            onSave = { newTags ->
+                vm.updateTagsForMultiple(selectedMedia.toList(), newTags)
+                showMultiTagDialog = false
+                selectedMedia = emptySet()
             }
         )
     }
@@ -570,7 +586,7 @@ fun FolderBrowserScreen(
                             }
                             Text("${selectedMedia.size} sélectionné(s)", style = MaterialTheme.typography.labelLarge)
                             Row {
-                                IconButton(onClick = { if (selectedMedia.size == 1) tagDialogMedia = selectedMedia.first() }) {
+                                IconButton(onClick = { if (selectedMedia.isNotEmpty()) showMultiTagDialog = true }) {
                                     Icon(Icons.Rounded.Tag, "Tags", tint = Amber)
                                 }
                                 IconButton(onClick = { actionSheetType = "COPY" }) {
@@ -921,7 +937,7 @@ fun FolderBrowserScreen(
                         }
                         Text("${selectedMedia.size} sélectionné(s)", style = MaterialTheme.typography.labelLarge)
                         Row {
-                            IconButton(onClick = { if (selectedMedia.size == 1) tagDialogMedia = selectedMedia.first() }) {
+                            IconButton(onClick = { if (selectedMedia.isNotEmpty()) showMultiTagDialog = true }) {
                                 Icon(Icons.Rounded.Tag, "Tags", tint = Amber)
                             }
                             IconButton(onClick = { actionSheetType = "COPY" }) {
