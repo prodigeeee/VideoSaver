@@ -624,13 +624,25 @@ fun TagEditDialog(
                     label = { Text("Ajouter un tag") },
                     placeholder = { Text("Tapez un mot-clé...") },
                     singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Done
+                    ),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                        onDone = {
+                            val newTag = inputText.trim().lowercase().removePrefix("#").trim()
+                            if (newTag.isNotEmpty() && !tags.contains(newTag)) {
+                                tags = tags + newTag
+                                inputText = ""
+                            }
+                        }
+                    ),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Amber,
                         focusedLabelColor = Amber,
                     ),
                     trailingIcon = {
                         IconButton(onClick = {
-                            val newTag = inputText.trim().lowercase()
+                            val newTag = inputText.trim().lowercase().removePrefix("#").trim()
                             if (newTag.isNotEmpty() && !tags.contains(newTag)) {
                                 tags = tags + newTag
                                 inputText = ""
@@ -667,7 +679,11 @@ fun TagEditDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onSave(tags) }) { Text("Enregistrer", color = Amber) }
+            TextButton(onClick = {
+                val pending = inputText.trim().lowercase().removePrefix("#").trim()
+                val finalTags = if (pending.isNotEmpty() && !tags.contains(pending)) tags + pending else tags
+                onSave(finalTags)
+            }) { Text("Enregistrer", color = Amber) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Annuler", color = TextSecondary) }

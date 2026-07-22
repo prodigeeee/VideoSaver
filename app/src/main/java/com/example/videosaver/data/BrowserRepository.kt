@@ -177,6 +177,34 @@ class BrowserRepository(
             ?: emptyList()
     }
 
+    private fun readPhysicalFileTags(file: File): List<String> {
+        try {
+            val ext = file.extension.lowercase()
+            if (ext in setOf("jpg", "jpeg", "png", "webp")) {
+                val exif = androidx.exifinterface.media.ExifInterface(file)
+                val comment = exif.getAttribute(androidx.exifinterface.media.ExifInterface.TAG_USER_COMMENT)
+                if (!comment.isNullOrBlank()) {
+                    val parsed = comment.split(",").map { it.trim() }.filter { it.isNotBlank() }
+                    if (parsed.isNotEmpty()) return parsed
+                }
+            }
+            val xmpFile = File("${file.absolutePath}.xmp")
+            val altXmp = try { File("${file.canonicalPath}.xmp") } catch (_: Exception) { null }
+            val targetXmp = when {
+                xmpFile.exists() -> xmpFile
+                altXmp?.exists() == true -> altXmp
+                else -> null
+            }
+            if (targetXmp != null && targetXmp.exists()) {
+                val content = targetXmp.readText()
+                val regex = "<rdf:li>(.*?)</rdf:li>".toRegex()
+                val matches = regex.findAll(content).map { it.groupValues[1].trim() }.filter { it.isNotBlank() }.toList()
+                if (matches.isNotEmpty()) return matches
+            }
+        } catch (_: Exception) {}
+        return emptyList()
+    }
+
     /** Scans a directory for media files (non-recursive to be fast) */
     suspend fun scanMediaFiles(dir: File): List<MediaFile> = withContext(Dispatchers.IO) {
         val showHidden = showHiddenFiles()
@@ -201,7 +229,10 @@ class BrowserRepository(
             when {
                 !f.isDirectory && (showHidden || !f.name.startsWith(".")) -> {
                     val canonical = try { f.canonicalPath } catch (_: Exception) { f.absolutePath }
-                    val tags = tagsMap[f.absolutePath] ?: tagsMap[canonical] ?: emptyList()
+                    var tags = tagsMap[f.absolutePath] ?: tagsMap[canonical] ?: emptyList()
+                    if (tags.isEmpty()) {
+                        tags = readPhysicalFileTags(f)
+                    }
                     if (isVideoFile(f)) {
                         val (w, h) = getVideoDimensions(f)
                         results.add(toMediaFile(f, isVideo = true, width = w, height = h, tags = tags))

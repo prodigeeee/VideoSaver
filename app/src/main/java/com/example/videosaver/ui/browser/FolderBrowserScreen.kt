@@ -146,6 +146,7 @@ fun FolderBrowserScreen(
 
     // Sorted + filtered media in current dir
     val sortedMedia = remember(state.mediaInCurrentDir, sortBy, mediaFilter, sizeFilter, dimensionFilter, tagFilters, tagSearchQuery) {
+        val cleanQ = tagSearchQuery.trim().lowercase().removePrefix("#").trim()
         state.mediaInCurrentDir
             .filter { f ->
                 val mediaMatch = when (mediaFilter) {
@@ -176,9 +177,8 @@ fun FolderBrowserScreen(
                     else if (wantsUntagged) untaggedOk
                     else normalOk
                 }
-                val queryMatch = if (tagSearchQuery.trim().isEmpty()) true else {
-                    val q = tagSearchQuery.trim()
-                    f.tags.any { it.contains(q, ignoreCase = true) } || f.name.contains(q, ignoreCase = true)
+                val queryMatch = if (cleanQ.isEmpty()) true else {
+                    f.tags.any { it.lowercase().contains(cleanQ) } || f.name.lowercase().contains(cleanQ)
                 }
 
                 mediaMatch && sizeMatch && dimMatch && tagMatch && queryMatch
@@ -1045,10 +1045,10 @@ private fun TagFilterToolbar(
     modifier: Modifier = Modifier,
 ) {
     val tagSuggestions = remember(tagSearchQuery, availableTags, selectedTags) {
-        val trimmed = tagSearchQuery.trim()
-        if (trimmed.length >= 2) {
+        val clean = tagSearchQuery.trim().lowercase().removePrefix("#").trim()
+        if (clean.length >= 2) {
             availableTags.filter { tag ->
-                tag != "UNTAGGED" && tag.contains(trimmed, ignoreCase = true) && !selectedTags.contains(tag)
+                tag != "UNTAGGED" && tag.lowercase().contains(clean) && !selectedTags.contains(tag)
             }
         } else emptyList()
     }
@@ -1292,6 +1292,7 @@ private fun TagFilterToolbar(
                             DropdownMenu(
                                 expanded = showSortMenu,
                                 onDismissRequest = { showSortMenu = false },
+                                modifier = Modifier.background(SurfaceDark),
                             ) {
                                 BrowserSort.entries.forEach { option ->
                                     DropdownMenuItem(
@@ -1304,7 +1305,12 @@ private fun TagFilterToolbar(
                                             if (sortBy == option) {
                                                 Icon(Icons.Rounded.Check, null, tint = Amber, modifier = Modifier.size(16.dp))
                                             }
-                                        }
+                                        },
+                                        colors = MenuDefaults.itemColors(
+                                            textColor = TextPrimary,
+                                            leadingIconColor = Amber,
+                                            trailingIconColor = Amber,
+                                        )
                                     )
                                 }
                             }
