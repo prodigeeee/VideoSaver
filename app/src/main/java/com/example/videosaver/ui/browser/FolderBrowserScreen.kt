@@ -823,25 +823,12 @@ private fun MediaGridCard(
                     }
                 }
 
-                // Format badge & tag edit button (top-end)
+                // Format badge (top-end)
                 Row(
                     modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    if (onEditTags != null && !inSelectionMode) {
-                        Surface(
-                            onClick = onEditTags,
-                            color = Color.Black.copy(0.65f),
-                            shape = CircleShape,
-                            border = BorderStroke(1.dp, AmberGlow),
-                            modifier = Modifier.size(30.dp),
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Rounded.Tag, "Gérer les tags", tint = Amber, modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    }
                     Surface(
                         color  = accentColor.copy(0.2f),
                         shape  = RoundedCornerShape(5.dp),
@@ -889,6 +876,24 @@ private fun MediaGridCard(
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Tag edit button overlay (placed directly on root Box so touches NEVER trigger parent video playback)
+        if (onEditTags != null && !inSelectionMode) {
+            Surface(
+                onClick = onEditTags,
+                color = Color.Black.copy(0.75f),
+                shape = CircleShape,
+                border = BorderStroke(1.dp, AmberGlow),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 6.dp, end = 48.dp)
+                    .size(32.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.Tag, "Gérer les tags", tint = Amber, modifier = Modifier.size(16.dp))
                 }
             }
         }
@@ -1044,6 +1049,13 @@ private fun TagFilterToolbar(
     onColumnsChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val orderedTags = remember(availableTags, selectedTags) {
+        availableTags.sortedWith(
+            compareByDescending<String> { selectedTags.contains(it) }
+                .thenBy { if (it == "UNTAGGED") " " else it.lowercase() }
+        )
+    }
+
     val tagSuggestions = remember(tagSearchQuery, availableTags, selectedTags) {
         val clean = tagSearchQuery.trim().lowercase().removePrefix("#").trim()
         if (clean.length >= 2) {
@@ -1231,8 +1243,8 @@ private fun TagFilterToolbar(
                             )
                         }
 
-                        // Tags (UNTAGGED + all available tags)
-                        items(availableTags) { tag ->
+                        // Tags (Active selected tags FIRST, then UNTAGGED + remaining tags)
+                        items(orderedTags) { tag ->
                             val isSel = selectedTags.contains(tag)
                             FilterChip(
                                 selected = isSel,
