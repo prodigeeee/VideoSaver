@@ -138,6 +138,11 @@ fun FolderBrowserScreen(
         tagSearchQuery = ""
     }
 
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        vm.refreshCurrentDir()
+        onPauseOrDispose { }
+    }
+
     if (actionSheetType != null) {
         com.example.videosaver.ui.components.MoveFileSheet(
             favorites = favorites,

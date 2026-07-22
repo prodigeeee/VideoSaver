@@ -75,6 +75,13 @@ class BrowserViewModel(
         }
     }
 
+    fun refreshCurrentDir() {
+        val current = _state.value.currentPath
+        if (current.exists()) {
+            navigateTo(current)
+        }
+    }
+
     fun navigateUp() {
         val parent = _state.value.currentPath.parentFile ?: return
         navigateTo(parent)

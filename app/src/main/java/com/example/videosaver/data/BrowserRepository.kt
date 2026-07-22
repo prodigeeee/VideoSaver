@@ -180,7 +180,7 @@ class BrowserRepository(
             ?: emptyList()
     }
 
-    private fun readPhysicalFileTags(file: File): List<String> {
+    private fun readPhysicalFileTags(file: File, existingXmpNames: Set<String>? = null): List<String> {
         try {
             val ext = file.extension.lowercase()
             if (ext in setOf("jpg", "jpeg", "png", "webp")) {
@@ -191,24 +191,21 @@ class BrowserRepository(
                     if (parsed.isNotEmpty()) return parsed
                 }
             }
-            val xmpFile = File("${file.absolutePath}.xmp")
-            val altXmp = try { File("${file.canonicalPath}.xmp") } catch (_: Exception) { null }
-            val targetXmp = when {
-                xmpFile.exists() -> xmpFile
-                altXmp?.exists() == true -> altXmp
-                else -> null
-            }
-            if (targetXmp != null && targetXmp.exists()) {
-                val content = targetXmp.readText()
-                val regex = "<rdf:li>(.*?)</rdf:li>".toRegex()
-                val matches = regex.findAll(content).map { it.groupValues[1].trim() }.filter { it.isNotBlank() }.toList()
-                if (matches.isNotEmpty()) return matches
+            val hasXmp = existingXmpNames?.contains("${file.name}.xmp") ?: File("${file.absolutePath}.xmp").exists()
+            if (hasXmp) {
+                val targetXmp = File("${file.absolutePath}.xmp")
+                if (targetXmp.exists()) {
+                    val content = targetXmp.readText()
+                    val regex = "<rdf:li>(.*?)</rdf:li>".toRegex()
+                    val matches = regex.findAll(content).map { it.groupValues[1].trim() }.filter { it.isNotBlank() }.toList()
+                    if (matches.isNotEmpty()) return matches
+                }
             }
         } catch (_: Exception) {}
         return emptyList()
     }
 
-    /** Scans a directory for media files (non-recursive to be fast) */
+    /** Scans a directory for media files (non-recursive to be ultra fast for 1000+ files) */
     suspend fun scanMediaFiles(dir: File): List<MediaFile> = withContext(Dispatchers.IO) {
         val showHidden = showHiddenFiles()
         val results = mutableListOf<MediaFile>()
@@ -217,32 +214,30 @@ class BrowserRepository(
             val map = mutableMapOf<String, List<String>>()
             downloadDao.getCompletedDownloadsList().forEach {
                 map[it.filePath] = it.tags
-                try { map[File(it.filePath).canonicalPath] = it.tags } catch (_: Exception) {}
             }
             fileTagDao.getAllFileTags().forEach {
                 map[it.filePath] = it.tags
-                try { map[File(it.filePath).canonicalPath] = it.tags } catch (_: Exception) {}
             }
             map
         } catch (e: Exception) {
             emptyMap()
         }
 
-        dir.listFiles()?.forEach { f ->
-            when {
-                !f.isDirectory && (showHidden || !f.name.startsWith(".")) -> {
-                    val canonical = try { f.canonicalPath } catch (_: Exception) { f.absolutePath }
-                    var tags = tagsMap[f.absolutePath] ?: tagsMap[canonical] ?: emptyList()
-                    if (tags.isEmpty()) {
-                        tags = readPhysicalFileTags(f)
-                    }
-                    if (isVideoFile(f)) {
-                        val (w, h) = dimensionsCache[f.absolutePath] ?: getVideoDimensions(f)
-                        results.add(toMediaFile(f, isVideo = true, width = w, height = h, tags = tags))
-                    }
-                    else if (isAudioFile(f)) results.add(toMediaFile(f, isAudio = true, tags = tags))
-                    else if (isImageFile(f)) results.add(toMediaFile(f, isImage = true, tags = tags))
+        val allFiles = dir.listFiles() ?: return@withContext emptyList()
+        val xmpNames = allFiles.filter { it.name.endsWith(".xmp") }.map { it.name }.toSet()
+
+        for (f in allFiles) {
+            if (!f.isDirectory && (showHidden || !f.name.startsWith(".")) && !f.name.endsWith(".xmp")) {
+                var tags = tagsMap[f.absolutePath] ?: emptyList()
+                if (tags.isEmpty()) {
+                    tags = readPhysicalFileTags(f, xmpNames)
                 }
+                if (isVideoFile(f)) {
+                    val (w, h) = dimensionsCache[f.absolutePath] ?: Pair(0, 0)
+                    results.add(toMediaFile(f, isVideo = true, width = w, height = h, tags = tags))
+                }
+                else if (isAudioFile(f)) results.add(toMediaFile(f, isAudio = true, tags = tags))
+                else if (isImageFile(f)) results.add(toMediaFile(f, isImage = true, tags = tags))
             }
         }
         
