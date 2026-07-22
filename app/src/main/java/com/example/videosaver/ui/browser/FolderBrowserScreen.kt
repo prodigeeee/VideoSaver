@@ -144,6 +144,34 @@ fun FolderBrowserScreen(
         listOf("UNTAGGED") + allKnownTags
     }
 
+    if (tagDialogMedia != null) {
+        com.example.videosaver.ui.library.TagEditDialog(
+            initialTags = tagDialogMedia!!.tags,
+            allKnownTags = allKnownTags,
+            onDismiss = { tagDialogMedia = null },
+            onSave = { newTags ->
+                vm.updateFileTags(tagDialogMedia!!, newTags)
+                tagDialogMedia = null
+            }
+        )
+    }
+
+    if (showMultiTagDialog && selectedMedia.isNotEmpty()) {
+        val initialTags = remember(selectedMedia) {
+            selectedMedia.flatMap { it.tags }.distinct().sorted()
+        }
+        com.example.videosaver.ui.library.TagEditDialog(
+            initialTags = initialTags,
+            allKnownTags = allKnownTags,
+            onDismiss = { showMultiTagDialog = false },
+            onSave = { newTags ->
+                vm.updateTagsForMultiple(selectedMedia.toList(), newTags)
+                showMultiTagDialog = false
+                selectedMedia = emptySet()
+            }
+        )
+    }
+
     // Sorted + filtered media in current dir
     val sortedMedia = remember(state.mediaInCurrentDir, sortBy, mediaFilter, sizeFilter, dimensionFilter, tagFilters, tagSearchQuery) {
         val cleanQ = tagSearchQuery.trim().lowercase().removePrefix("#").trim()
