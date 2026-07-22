@@ -48,6 +48,7 @@ class BrowserRepository(
     private val context: Context,
     private val folderDao: FolderDao = AppDatabase.getInstance(context).folderDao(),
     private val downloadDao: DownloadDao = AppDatabase.getInstance(context).downloadDao(),
+    private val fileTagDao: FileTagDao = AppDatabase.getInstance(context).fileTagDao(),
 ) {
     private val prefs = context.getSharedPreferences("videosaver_prefs", Context.MODE_PRIVATE)
     private fun showHiddenFiles(): Boolean = prefs.getBoolean("show_hidden_files", false)
@@ -143,7 +144,7 @@ class BrowserRepository(
         val showHidden = showHiddenFiles()
 
         dir.listFiles()
-            ?.filter { showHidden || !it.name.startsWith(".") } // hide hidden
+            ?.filter { showHidden || !it.name.startsWith(".") }
             ?.map { f ->
                 if (f.isDirectory) {
                     val childArray = f.list() ?: emptyArray()
@@ -182,7 +183,9 @@ class BrowserRepository(
         val results = mutableListOf<MediaFile>()
 
         val tagsMap = try {
-            downloadDao.getCompletedDownloadsList().associate { it.filePath to it.tags }
+            val fromDl = downloadDao.getCompletedDownloadsList().associate { it.filePath to it.tags }
+            val fromFileTag = fileTagDao.getAllFileTags().associate { it.filePath to it.tags }
+            fromDl + fromFileTag
         } catch (e: Exception) {
             emptyMap()
         }
@@ -280,27 +283,12 @@ class BrowserRepository(
     )
 
     suspend fun updateFileTags(file: File, tags: List<String>) = withContext(Dispatchers.IO) {
+        fileTagDao.insertOrUpdate(FileTagEntity(file.absolutePath, tags))
+        downloadDao.purgeLocalFileEntries()
+
         val existing = downloadDao.getByFilePath(file.absolutePath)
-        if (existing != null) {
+        if (existing != null && !existing.url.startsWith("file://")) {
             downloadDao.updateTags(existing.id, tags)
-        } else {
-            val isVideo = isVideoFile(file)
-            val isAudio = isAudioFile(file)
-            val entity = DownloadEntity(
-                url = "file://${file.absolutePath}",
-                title = file.nameWithoutExtension,
-                thumbnailUrl = if (isVideo || file.extension.lowercase() in setOf("jpg", "jpeg", "png", "webp")) file.absolutePath else null,
-                filePath = file.absolutePath,
-                fileSize = file.length(),
-                quality = "Local",
-                formatId = file.extension.lowercase(),
-                isAudioOnly = isAudio,
-                audioFormat = if (isAudio) file.extension.lowercase() else "mp3",
-                status = DownloadStatus.COMPLETED,
-                tags = tags,
-                completedAt = file.lastModified(),
-            )
-            downloadDao.insert(entity)
         }
 
         // 1. Physical metadata: EXIF UserComment for images

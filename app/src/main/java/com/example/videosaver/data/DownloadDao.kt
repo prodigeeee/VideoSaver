@@ -15,11 +15,14 @@ interface DownloadDao {
     @Update
     suspend fun update(download: DownloadEntity)
 
-    @Query("SELECT * FROM downloads ORDER BY createdAt DESC")
+    @Query("SELECT * FROM downloads WHERE url NOT LIKE 'file://%' ORDER BY createdAt DESC")
     fun getAllDownloads(): Flow<List<DownloadEntity>>
 
     @Query("SELECT * FROM downloads WHERE status = 'COMPLETED' AND url NOT LIKE 'file://%' ORDER BY completedAt DESC")
     fun getCompletedDownloads(): Flow<List<DownloadEntity>>
+
+    @Query("DELETE FROM downloads WHERE url LIKE 'file://%'")
+    suspend fun purgeLocalFileEntries()
 
     @Query("SELECT * FROM downloads WHERE tags IS NOT NULL AND tags != '[]'")
     suspend fun getCompletedDownloadsList(): List<DownloadEntity>

@@ -7,14 +7,15 @@ import androidx.room.TypeConverters
 import android.content.Context
 
 @Database(
-    entities = [DownloadEntity::class, FolderEntity::class],
-    version = 3,
+    entities = [DownloadEntity::class, FolderEntity::class, FileTagEntity::class],
+    version = 4,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun downloadDao(): DownloadDao
     abstract fun folderDao(): FolderDao
+    abstract fun fileTagDao(): FileTagDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -25,6 +26,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : androidx.room.migration.Migration(3, 4) {
+            override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+                database.execSQL("CREATE TABLE IF NOT EXISTS file_tags (filePath TEXT NOT NULL, tags TEXT NOT NULL, PRIMARY KEY(filePath))")
+                database.execSQL("DELETE FROM downloads WHERE url LIKE 'file://%'")
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
@@ -32,7 +40,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "videosaver_db"
                 )
-                .addMigrations(MIGRATION_2_3)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                 .fallbackToDestructiveMigration(dropAllTables = false)
                 .build()
                 .also { INSTANCE = it }

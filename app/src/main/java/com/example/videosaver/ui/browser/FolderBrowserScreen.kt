@@ -48,6 +48,10 @@ private enum class BrowserSort(val label: String) {
     SIZE_ASC("Plus petit"),
     RES_DESC("Résolution ↓"),
     RES_ASC("Résolution ↑"),
+    TAGS_ASC("Tags A→Z"),
+    TAGS_DESC("Tags Z→A"),
+    TAGGED_FIRST("Taggés en premier"),
+    UNTAGGED_FIRST("Non taggés en premier"),
 }
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
@@ -222,14 +226,18 @@ fun FolderBrowserScreen(
             }
             .let { list ->
                 when (sortBy) {
-                    BrowserSort.NAME_ASC  -> list.sortedBy { it.name.lowercase() }
-                    BrowserSort.NAME_DESC -> list.sortedByDescending { it.name.lowercase() }
-                    BrowserSort.DATE_DESC -> list.sortedByDescending { it.lastModified }
-                    BrowserSort.DATE_ASC  -> list.sortedBy { it.lastModified }
-                    BrowserSort.SIZE_DESC -> list.sortedByDescending { it.sizeBytes }
-                    BrowserSort.SIZE_ASC  -> list.sortedBy { it.sizeBytes }
-                    BrowserSort.RES_DESC  -> list.sortedByDescending { it.videoWidth * it.videoHeight }
-                    BrowserSort.RES_ASC   -> list.sortedBy { it.videoWidth * it.videoHeight }
+                    BrowserSort.NAME_ASC       -> list.sortedBy { it.name.lowercase() }
+                    BrowserSort.NAME_DESC      -> list.sortedByDescending { it.name.lowercase() }
+                    BrowserSort.DATE_DESC      -> list.sortedByDescending { it.lastModified }
+                    BrowserSort.DATE_ASC       -> list.sortedBy { it.lastModified }
+                    BrowserSort.SIZE_DESC      -> list.sortedByDescending { it.sizeBytes }
+                    BrowserSort.SIZE_ASC       -> list.sortedBy { it.sizeBytes }
+                    BrowserSort.RES_DESC       -> list.sortedByDescending { it.videoWidth * it.videoHeight }
+                    BrowserSort.RES_ASC        -> list.sortedBy { it.videoWidth * it.videoHeight }
+                    BrowserSort.TAGS_ASC       -> list.sortedWith(compareBy<MediaFile> { it.tags.isEmpty() }.thenBy { it.tags.joinToString(",") }.thenBy { it.name.lowercase() })
+                    BrowserSort.TAGS_DESC      -> list.sortedWith(compareBy<MediaFile> { it.tags.isEmpty() }.thenByDescending { it.tags.joinToString(",") }.thenBy { it.name.lowercase() })
+                    BrowserSort.TAGGED_FIRST   -> list.sortedWith(compareBy<MediaFile> { it.tags.isEmpty() }.thenBy { it.name.lowercase() })
+                    BrowserSort.UNTAGGED_FIRST -> list.sortedWith(compareBy<MediaFile> { !it.tags.isEmpty() }.thenBy { it.name.lowercase() })
                 }
             }
     }
