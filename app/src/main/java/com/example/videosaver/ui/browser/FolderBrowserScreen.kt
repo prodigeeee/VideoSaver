@@ -99,6 +99,12 @@ fun FolderBrowserScreen(
         }
     }
 
+    var tagSearchQuery by remember { mutableStateOf("") }
+    var isFilterToolbarExpanded by remember { mutableStateOf(true) }
+
+    var lastScrollIndex by remember { mutableIntStateOf(0) }
+    var lastScrollOffset by remember { mutableIntStateOf(0) }
+
     LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
         if (!state.isLoading && state.entries.isNotEmpty()) {
             vm.saveScrollPosition(
@@ -107,6 +113,16 @@ fun FolderBrowserScreen(
                 listState.firstVisibleItemScrollOffset
             )
         }
+        val isScrollingDown = when {
+            listState.firstVisibleItemIndex > lastScrollIndex -> true
+            listState.firstVisibleItemIndex < lastScrollIndex -> false
+            else -> listState.firstVisibleItemScrollOffset > lastScrollOffset + 25
+        }
+        if (listState.isScrollInProgress && isScrollingDown && listState.firstVisibleItemIndex > 0) {
+            isFilterToolbarExpanded = false
+        }
+        lastScrollIndex = listState.firstVisibleItemIndex
+        lastScrollOffset = listState.firstVisibleItemScrollOffset
     }
 
     // Multi-selection
@@ -416,133 +432,29 @@ fun FolderBrowserScreen(
                     // Barre compacte UNIQUE (filtres + grille + tri sur une seule ligne)
                     if (state.mediaInCurrentDir.isNotEmpty()) {
                         stickyHeader {
-                            Surface(color = Background.copy(alpha = 0.95f), modifier = Modifier.fillMaxWidth()) {
-                                Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                                    LazyRow(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    ) {
-                                        // Types
-                                        items(listOf(null to "Tous", "video" to "Vidéos", "image" to "Imgs", "audio" to "♪")) { (key, lbl) ->
-                                            FilterChip(
-                                                selected = mediaFilter == key,
-                                                onClick = { mediaFilter = key },
-                                                label = { Text(lbl, style = MaterialTheme.typography.labelSmall) },
-                                                colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = AmberGlow,
-                                                    selectedLabelColor     = Amber,
-                                                    containerColor         = GlassWhite,
-                                                    labelColor             = TextSecondary,
-                                                ),
-                                                shape = RoundedCornerShape(6.dp),
-                                            )
-                                        }
-
-                                        // Size
-                                        items(listOf("<100M" to "<100M", "100M-1G" to "100M-1G", ">1G" to ">1G")) { (key, lbl) ->
-                                            FilterChip(
-                                                selected = sizeFilter == key,
-                                                onClick = { sizeFilter = if (sizeFilter == key) null else key },
-                                                label = { Text(lbl, style = MaterialTheme.typography.labelSmall) },
-                                                colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = AmberGlow,
-                                                    selectedLabelColor     = Amber,
-                                                    containerColor         = GlassWhite,
-                                                    labelColor             = TextSecondary,
-                                                ),
-                                                shape = RoundedCornerShape(6.dp),
-                                            )
-                                        }
-
-                                        // Dimension / Orientation
-                                        items(listOf("PORTRAIT" to "📱", "LANDSCAPE" to "🖼️", "HD" to "HD", "4K" to "4K")) { (key, lbl) ->
-                                            FilterChip(
-                                                selected = dimensionFilter == key,
-                                                onClick = { dimensionFilter = if (dimensionFilter == key) null else key },
-                                                label = { Text(lbl, style = MaterialTheme.typography.labelSmall) },
-                                                colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = AmberGlow,
-                                                    selectedLabelColor     = Amber,
-                                                    containerColor         = GlassWhite,
-                                                    labelColor             = TextSecondary,
-                                                ),
-                                                shape = RoundedCornerShape(6.dp),
-                                            )
-                                        }
-
-                                        // Tags
-                                        items(availableTags) { tag ->
-                                            val isSel = tagFilters.contains(tag)
-                                            FilterChip(
-                                                selected = isSel,
-                                                onClick = {
-                                                    tagFilters = if (isSel) tagFilters - tag else tagFilters + tag
-                                                },
-                                                label = { Text(if (tag == "UNTAGGED") "🚫 Sans tag" else "#$tag", style = MaterialTheme.typography.labelSmall) },
-                                                colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = AmberGlow,
-                                                    selectedLabelColor     = Amber,
-                                                    containerColor         = GlassWhite,
-                                                    labelColor             = TextSecondary,
-                                                ),
-                                                shape = RoundedCornerShape(6.dp),
-                                            )
-                                        }
-                                    }
-
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    ) {
-                                        Text(
-                                            "${sortedMedia.size} média(s)",
-                                            style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary),
-                                            modifier = Modifier.weight(1f).padding(start = 4.dp),
-                                        )
-                                        // Grille
-                                        Icon(Icons.Rounded.GridView, null, tint = TextSecondary,
-                                            modifier = Modifier.size(12.dp))
-                                        Slider(
-                                            value         = (5 - columns).toFloat(),
-                                            onValueChange = { columns = (5 - it.toInt()).coerceIn(1, 4) },
-                                            valueRange    = 1f..4f,
-                                            steps         = 2,
-                                            colors        = SliderDefaults.colors(
-                                                thumbColor         = Amber,
-                                                activeTrackColor   = Amber,
-                                                inactiveTrackColor = AmberDim.copy(0.3f),
-                                            ),
-                                            modifier = Modifier.width(72.dp),
-                                        )
-                                        Surface(color = AmberGlow, shape = RoundedCornerShape(5.dp)) {
-                                            Text("${columns}×",
-                                                style = MaterialTheme.typography.labelSmall.copy(color = Amber),
-                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
-                                        }
-                                        // Tri
-                                        Box {
-                                            IconButton(onClick = { showSortMenu = true }, modifier = Modifier.size(28.dp)) {
-                                                Icon(Icons.Rounded.SwapVert, "Trier", tint = Amber, modifier = Modifier.size(16.dp))
-                                            }
-                                            DropdownMenu(
-                                                expanded = showSortMenu,
-                                                onDismissRequest = { showSortMenu = false },
-                                                containerColor = SurfaceMid,
-                                            ) {
-                                                BrowserSort.entries.forEach { s ->
-                                                    DropdownMenuItem(
-                                                        text = { Text(s.label, color = if (sortBy == s) Amber else TextPrimary) },
-                                                        trailingIcon = {
-                                                            if (sortBy == s) Icon(Icons.Rounded.Check, null, tint = Amber, modifier = Modifier.size(16.dp))
-                                                        },
-                                                        onClick = { sortBy = s; showSortMenu = false },
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            TagFilterToolbar(
+                                tagSearchQuery = tagSearchQuery,
+                                onQueryChange = { tagSearchQuery = it },
+                                availableTags = availableTags,
+                                selectedTags = tagFilters,
+                                onToggleTag = { tag ->
+                                    tagFilters = if (tagFilters.contains(tag)) tagFilters - tag else tagFilters + tag
+                                },
+                                isExpanded = isFilterToolbarExpanded,
+                                onToggleExpand = { isFilterToolbarExpanded = !isFilterToolbarExpanded },
+                                mediaFilter = mediaFilter,
+                                onMediaFilterChange = { mediaFilter = it },
+                                sizeFilter = sizeFilter,
+                                onSizeFilterChange = { sizeFilter = it },
+                                dimensionFilter = dimensionFilter,
+                                onDimensionFilterChange = { dimensionFilter = it },
+                                sortBy = sortBy,
+                                onSortByChange = { sortBy = it },
+                                sortedMediaCount = sortedMedia.size,
+                                columns = columns,
+                                onColumnsChange = { columns = it },
+                                modifier = Modifier.padding(bottom = 6.dp),
+                            )
                         }
                     }
 
@@ -772,134 +684,29 @@ fun FolderBrowserScreen(
                     // ── Media section header with controls (STICKY) ────────────────
                     if (state.mediaInCurrentDir.isNotEmpty()) {
                         stickyHeader {
-                            Surface(color = Background.copy(alpha = 0.95f), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                                Column {
-                                    Spacer(Modifier.height(12.dp))
-                                    // Toolbar: filter chips (Type + Size + Dimensions + Tags)
-                                    LazyRow(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    ) {
-                                        items(listOf(null to "Tous", "video" to "Vidéos", "image" to "Images", "audio" to "Audio")) { (key, lbl) ->
-                                            FilterChip(
-                                                selected = mediaFilter == key,
-                                                onClick  = { mediaFilter = key },
-                                                label    = { Text(lbl) },
-                                                colors   = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor   = AmberGlow,
-                                                    selectedLabelColor       = Amber,
-                                                    containerColor           = GlassWhite,
-                                                    labelColor               = TextSecondary,
-                                                ),
-                                                shape = RoundedCornerShape(8.dp),
-                                            )
-                                        }
-
-                                        items(listOf("<100M" to "< 100 Mo", "100M-1G" to "100Mo-1Go", ">1G" to "> 1 Go")) { (key, lbl) ->
-                                            FilterChip(
-                                                selected = sizeFilter == key,
-                                                onClick  = { sizeFilter = if (sizeFilter == key) null else key },
-                                                label    = { Text(lbl) },
-                                                colors   = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor   = AmberGlow,
-                                                    selectedLabelColor       = Amber,
-                                                    containerColor           = GlassWhite,
-                                                    labelColor               = TextSecondary,
-                                                ),
-                                                shape = RoundedCornerShape(8.dp),
-                                            )
-                                        }
-
-                                        items(listOf("PORTRAIT" to "📱 Portrait", "LANDSCAPE" to "🖼️ Paysage", "HD" to "HD 720p+", "4K" to "4K 2160p")) { (key, lbl) ->
-                                            FilterChip(
-                                                selected = dimensionFilter == key,
-                                                onClick  = { dimensionFilter = if (dimensionFilter == key) null else key },
-                                                label    = { Text(lbl) },
-                                                colors   = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor   = AmberGlow,
-                                                    selectedLabelColor       = Amber,
-                                                    containerColor           = GlassWhite,
-                                                    labelColor               = TextSecondary,
-                                                ),
-                                                shape = RoundedCornerShape(8.dp),
-                                            )
-                                        }
-
-                                        items(availableTags) { tag ->
-                                            val isSel = tagFilters.contains(tag)
-                                            FilterChip(
-                                                selected = isSel,
-                                                onClick  = {
-                                                    tagFilters = if (isSel) tagFilters - tag else tagFilters + tag
-                                                },
-                                                label    = { Text(if (tag == "UNTAGGED") "🚫 Sans tag" else "#$tag") },
-                                                colors   = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor   = AmberGlow,
-                                                    selectedLabelColor       = Amber,
-                                                    containerColor           = GlassWhite,
-                                                    labelColor               = TextSecondary,
-                                                ),
-                                                shape = RoundedCornerShape(8.dp),
-                                            )
-                                        }
-                                    }
-
-                                    Spacer(Modifier.height(8.dp))
-
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    ) {
-                                        Text(
-                                            "Médias (${sortedMedia.size})",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            modifier = Modifier.weight(1f).padding(start = 4.dp),
-                                        )
-
-                                        // Grid size slider (1–4)
-                                        Icon(Icons.Rounded.GridView, null, tint = TextSecondary, modifier = Modifier.size(14.dp))
-                                        Slider(
-                                            value         = (5 - columns).toFloat(),
-                                            onValueChange = { columns = (5 - it.toInt()).coerceIn(1, 4) },
-                                            valueRange    = 1f..4f,
-                                            steps         = 2,
-                                            colors        = SliderDefaults.colors(
-                                                thumbColor        = Amber,
-                                                activeTrackColor  = Amber,
-                                                inactiveTrackColor = AmberDim.copy(0.3f),
-                                            ),
-                                            modifier = Modifier.width(90.dp),
-                                        )
-                                        Surface(color = AmberGlow, shape = RoundedCornerShape(5.dp)) {
-                                            Text("${columns}×",
-                                                style = MaterialTheme.typography.labelSmall.copy(color = Amber),
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
-                                        }
-
-                                        // Sort dropdown
-                                        Box {
-                                            IconButton(onClick = { showSortMenu = true }, modifier = Modifier.size(32.dp)) {
-                                                Icon(Icons.Rounded.SwapVert, "Trier", tint = Amber, modifier = Modifier.size(20.dp))
-                                            }
-                                            DropdownMenu(
-                                                expanded = showSortMenu,
-                                                onDismissRequest = { showSortMenu = false },
-                                                containerColor = SurfaceMid,
-                                            ) {
-                                                BrowserSort.entries.forEach { s ->
-                                                    DropdownMenuItem(
-                                                        text = { Text(s.label, color = if (sortBy == s) Amber else TextPrimary) },
-                                                        trailingIcon = {
-                                                            if (sortBy == s) Icon(Icons.Rounded.Check, null, tint = Amber, modifier = Modifier.size(16.dp))
-                                                        },
-                                                        onClick = { sortBy = s; showSortMenu = false },
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            TagFilterToolbar(
+                                tagSearchQuery = tagSearchQuery,
+                                onQueryChange = { tagSearchQuery = it },
+                                availableTags = availableTags,
+                                selectedTags = tagFilters,
+                                onToggleTag = { tag ->
+                                    tagFilters = if (tagFilters.contains(tag)) tagFilters - tag else tagFilters + tag
+                                },
+                                isExpanded = isFilterToolbarExpanded,
+                                onToggleExpand = { isFilterToolbarExpanded = !isFilterToolbarExpanded },
+                                mediaFilter = mediaFilter,
+                                onMediaFilterChange = { mediaFilter = it },
+                                sizeFilter = sizeFilter,
+                                onSizeFilterChange = { sizeFilter = it },
+                                dimensionFilter = dimensionFilter,
+                                onDimensionFilterChange = { dimensionFilter = it },
+                                sortBy = sortBy,
+                                onSortByChange = { sortBy = it },
+                                sortedMediaCount = sortedMedia.size,
+                                columns = columns,
+                                onColumnsChange = { columns = it },
+                                modifier = Modifier.padding(bottom = 6.dp),
+                            )
                         }
                     }
 
@@ -1267,4 +1074,319 @@ private fun formatFileSize(bytes: Long): String = when {
 private fun formatPath(path: String): String {
     val parts = path.split("/")
     return if (parts.size > 3) "…/${parts.takeLast(2).joinToString("/")}" else path
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TagFilterToolbar(
+    tagSearchQuery: String,
+    onQueryChange: (String) -> Unit,
+    availableTags: List<String>,
+    selectedTags: Set<String>,
+    onToggleTag: (String) -> Unit,
+    isExpanded: Boolean,
+    onToggleExpand: () -> Unit,
+    mediaFilter: String?,
+    onMediaFilterChange: (String?) -> Unit,
+    sizeFilter: String?,
+    onSizeFilterChange: (String?) -> Unit,
+    dimensionFilter: String?,
+    onDimensionFilterChange: (String?) -> Unit,
+    sortBy: BrowserSort,
+    onSortByChange: (BrowserSort) -> Unit,
+    sortedMediaCount: Int,
+    columns: Int,
+    onColumnsChange: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val tagSuggestions = remember(tagSearchQuery, availableTags, selectedTags) {
+        val trimmed = tagSearchQuery.trim()
+        if (trimmed.length >= 2) {
+            availableTags.filter { tag ->
+                tag != "UNTAGGED" && tag.contains(trimmed, ignoreCase = true) && !selectedTags.contains(tag)
+            }
+        } else emptyList()
+    }
+
+    Surface(
+        color = Background.copy(alpha = 0.96f),
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, GlassBorder),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            // Header Row: Search field or collapsed summary pill + Expand button
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (isExpanded) {
+                    OutlinedTextField(
+                        value = tagSearchQuery,
+                        onValueChange = onQueryChange,
+                        placeholder = { Text("Recherche tag (≥ 2 lettres)...", style = MaterialTheme.typography.bodySmall) },
+                        leadingIcon = { Icon(Icons.Rounded.Tag, contentDescription = null, tint = Amber, modifier = Modifier.size(18.dp)) },
+                        trailingIcon = {
+                            if (tagSearchQuery.isNotEmpty()) {
+                                IconButton(onClick = { onQueryChange("") }, modifier = Modifier.size(24.dp)) {
+                                    Icon(Icons.Rounded.Close, "Effacer", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Amber,
+                            unfocusedBorderColor = GlassBorder,
+                            focusedContainerColor = GlassWhite,
+                            unfocusedContainerColor = GlassWhite,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary,
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f).height(46.dp),
+                    )
+                } else {
+                    // Collapsed Summary Bar
+                    Surface(
+                        onClick = onToggleExpand,
+                        color = GlassWhite,
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, AmberGlow),
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        ) {
+                            Icon(Icons.Rounded.FilterList, null, tint = Amber, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            val filterSummary = buildList {
+                                if (selectedTags.isNotEmpty()) add("${selectedTags.size} tag(s)")
+                                if (mediaFilter != null) add(mediaFilter)
+                                if (sizeFilter != null) add(sizeFilter)
+                                if (dimensionFilter != null) add(dimensionFilter)
+                                add(sortBy.label)
+                            }.joinToString(" • ")
+                            Text(
+                                filterSummary,
+                                style = MaterialTheme.typography.labelSmall.copy(color = TextPrimary),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+
+                // Expand/Collapse Toggle Button
+                IconButton(
+                    onClick = onToggleExpand,
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(
+                        if (isExpanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
+                        contentDescription = if (isExpanded) "Réduire" else "Déplier",
+                        tint = Amber,
+                    )
+                }
+            }
+
+            AnimatedVisibility(visible = isExpanded) {
+                Column {
+                    // Autocomplete suggestions (shown when query length >= 2)
+                    if (tagSearchQuery.trim().length >= 2) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Suggestions :",
+                            style = MaterialTheme.typography.labelSmall.copy(color = Amber),
+                            modifier = Modifier.padding(start = 4.dp, bottom = 2.dp),
+                        )
+                        if (tagSuggestions.isEmpty()) {
+                            Text(
+                                "Aucun tag correspondant",
+                                style = MaterialTheme.typography.labelSmall.copy(color = TextDisabled),
+                                modifier = Modifier.padding(start = 4.dp, bottom = 4.dp),
+                            )
+                        } else {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.padding(bottom = 6.dp),
+                            ) {
+                                items(tagSuggestions) { tag ->
+                                    FilterChip(
+                                        selected = false,
+                                        onClick = {
+                                            onToggleTag(tag)
+                                            onQueryChange("")
+                                        },
+                                        label = { Text("💡 #$tag", style = MaterialTheme.typography.labelSmall) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            containerColor = AmberGlow,
+                                            labelColor = Amber,
+                                        ),
+                                        shape = RoundedCornerShape(8.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(6.dp))
+
+                    // Row of active filter chips (Type + Size + Dimensions + Untagged / Active Tags)
+                    LazyRow(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        // Types
+                        items(listOf(null to "Tous", "video" to "Vidéos", "image" to "Images", "audio" to "Audio")) { (key, lbl) ->
+                            FilterChip(
+                                selected = mediaFilter == key,
+                                onClick = { onMediaFilterChange(key) },
+                                label = { Text(lbl, style = MaterialTheme.typography.labelSmall) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = AmberGlow,
+                                    selectedLabelColor = Amber,
+                                    containerColor = GlassWhite,
+                                    labelColor = TextSecondary,
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                            )
+                        }
+
+                        // Size
+                        items(listOf("<100M" to "<100M", "100M-1G" to "100M-1G", ">1G" to ">1G")) { (key, lbl) ->
+                            FilterChip(
+                                selected = sizeFilter == key,
+                                onClick = { onSizeFilterChange(if (sizeFilter == key) null else key) },
+                                label = { Text(lbl, style = MaterialTheme.typography.labelSmall) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = AmberGlow,
+                                    selectedLabelColor = Amber,
+                                    containerColor = GlassWhite,
+                                    labelColor = TextSecondary,
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                            )
+                        }
+
+                        // Dimension
+                        items(listOf("PORTRAIT" to "📱 Portrait", "LANDSCAPE" to "🖼️ Paysage", "HD" to "HD", "4K" to "4K")) { (key, lbl) ->
+                            FilterChip(
+                                selected = dimensionFilter == key,
+                                onClick = { onDimensionFilterChange(if (dimensionFilter == key) null else key) },
+                                label = { Text(lbl, style = MaterialTheme.typography.labelSmall) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = AmberGlow,
+                                    selectedLabelColor = Amber,
+                                    containerColor = GlassWhite,
+                                    labelColor = TextSecondary,
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                            )
+                        }
+
+                        // Tags (UNTAGGED + all available tags)
+                        items(availableTags) { tag ->
+                            val isSel = selectedTags.contains(tag)
+                            FilterChip(
+                                selected = isSel,
+                                onClick = { onToggleTag(tag) },
+                                label = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(if (tag == "UNTAGGED") "🚫 Sans tag" else "#$tag", style = MaterialTheme.typography.labelSmall)
+                                        if (isSel) {
+                                            Spacer(Modifier.width(4.dp))
+                                            Icon(Icons.Rounded.Close, null, modifier = Modifier.size(12.dp))
+                                        }
+                                    }
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = AmberGlow,
+                                    selectedLabelColor = Amber,
+                                    containerColor = GlassWhite,
+                                    labelColor = TextSecondary,
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(6.dp))
+
+                    // Bottom Controls Row: Count + Sort Menu + Grid slider
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            "$sortedMediaCount média(s)",
+                            style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary),
+                            modifier = Modifier.weight(1f).padding(start = 4.dp),
+                        )
+
+                        // Sort Menu Dropdown
+                        var showSortMenu by remember { mutableStateOf(false) }
+                        Box {
+                            Surface(
+                                onClick = { showSortMenu = true },
+                                color = GlassWhite,
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, GlassBorder),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                ) {
+                                    Icon(Icons.Rounded.Sort, null, tint = Amber, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(sortBy.label, style = MaterialTheme.typography.labelSmall.copy(color = TextPrimary))
+                                }
+                            }
+
+                            DropdownMenu(
+                                expanded = showSortMenu,
+                                onDismissRequest = { showSortMenu = false },
+                            ) {
+                                BrowserSort.entries.forEach { option ->
+                                    DropdownMenuItem(
+                                        text = { Text(option.label, style = MaterialTheme.typography.bodySmall, color = if (sortBy == option) Amber else TextPrimary) },
+                                        onClick = {
+                                            onSortByChange(option)
+                                            showSortMenu = false
+                                        },
+                                        trailingIcon = {
+                                            if (sortBy == option) {
+                                                Icon(Icons.Rounded.Check, null, tint = Amber, modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        // Grid Columns Slider
+                        Icon(Icons.Rounded.GridView, null, tint = TextSecondary, modifier = Modifier.size(14.dp))
+                        Slider(
+                            value = (5 - columns).toFloat(),
+                            onValueChange = { onColumnsChange((5 - it.toInt()).coerceIn(1, 4)) },
+                            valueRange = 1f..4f,
+                            steps = 2,
+                            colors = SliderDefaults.colors(
+                                thumbColor = Amber,
+                                activeTrackColor = Amber,
+                                inactiveTrackColor = AmberDim.copy(0.3f),
+                            ),
+                            modifier = Modifier.width(64.dp),
+                        )
+                        Surface(color = AmberGlow, shape = RoundedCornerShape(5.dp)) {
+                            Text("${columns}×",
+                                style = MaterialTheme.typography.labelSmall.copy(color = Amber),
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
