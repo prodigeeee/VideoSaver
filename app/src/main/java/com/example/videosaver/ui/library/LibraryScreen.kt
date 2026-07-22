@@ -563,15 +563,21 @@ private fun MediaCard(
 fun TagEditDialog(
     initialTags: List<String>,
     allKnownTags: List<String> = emptyList(),
+    totalSelectedCount: Int = 1,
+    initialPartialTags: Map<String, Int> = emptyMap(),
     onDismiss: () -> Unit,
     onSave: (List<String>) -> Unit
 ) {
     var tags by remember { mutableStateOf(initialTags) }
+    var partialTags by remember { mutableStateOf(initialPartialTags) }
     var inputText by remember { mutableStateOf("") }
 
-    val suggestions = remember(inputText, allKnownTags, tags) {
-        if (inputText.trim().isEmpty()) emptyList()
-        else allKnownTags.filter { it.contains(inputText.trim(), ignoreCase = true) && !tags.contains(it) }
+    val suggestions = remember(inputText, allKnownTags, tags, partialTags) {
+        val clean = inputText.trim().lowercase().removePrefix("#").trim()
+        if (clean.isEmpty()) emptyList()
+        else allKnownTags.filter { 
+            it.lowercase().contains(clean) && !tags.contains(it) 
+        }
     }
 
     AlertDialog(
@@ -579,39 +585,116 @@ fun TagEditDialog(
         containerColor = Background,
         titleContentColor = TextPrimary,
         textContentColor = TextPrimary,
-        title = { Text("Gérer les tags", style = MaterialTheme.typography.titleMedium) },
+        title = {
+            Text(
+                if (totalSelectedCount > 1) "Gérer les tags ($totalSelectedCount vidéos)" else "Gérer les tags",
+                style = MaterialTheme.typography.titleMedium
+            )
+        },
         text = {
             Column {
-                Text(
-                    "Tags actuellement attribués (${tags.size}) :",
-                    style = MaterialTheme.typography.labelSmall.copy(color = Amber),
-                )
-                Spacer(Modifier.height(6.dp))
-                if (tags.isEmpty()) {
+                if (totalSelectedCount > 1) {
+                    // Multi-selection UI
                     Text(
-                        "Aucun tag attribué pour l'instant.",
-                        style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary),
-                        modifier = Modifier.padding(bottom = 8.dp)
+                        "Tags communs à toutes les vidéos (${tags.size}) :",
+                        style = MaterialTheme.typography.labelSmall.copy(color = Amber),
                     )
+                    Spacer(Modifier.height(4.dp))
+                    if (tags.isEmpty()) {
+                        Text("Aucun tag commun pour l'instant.", style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary))
+                    } else {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            tags.forEach { tag ->
+                                InputChip(
+                                    selected = true,
+                                    onClick = { tags = tags - tag },
+                                    label = { Text("#$tag") },
+                                    trailingIcon = { Icon(Icons.Rounded.Close, "Supprimer", Modifier.size(16.dp)) },
+                                    colors = InputChipDefaults.inputChipColors(
+                                        selectedContainerColor = AmberGlow,
+                                        selectedLabelColor = Amber,
+                                        selectedTrailingIconColor = Amber,
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                )
+                            }
+                        }
+                    }
+
+                    if (partialTags.isNotEmpty()) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            "Tags partiels (sur certaines vidéos) :",
+                            style = MaterialTheme.typography.labelSmall.copy(color = TealAccent),
+                        )
+                        Text(
+                            "Cliquez sur un tag partiel pour l'appliquer à TOUTES les vidéos.",
+                            style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary, fontSize = 10.sp),
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            partialTags.forEach { (tag, count) ->
+                                FilterChip(
+                                    selected = false,
+                                    onClick = {
+                                        // Promote partial tag to common tag for all selected files!
+                                        tags = (tags + tag).distinct()
+                                        partialTags = partialTags - tag
+                                    },
+                                    label = { Text("◐ #$tag ($count/$totalSelectedCount) ⚡") },
+                                    trailingIcon = {
+                                        IconButton(onClick = { partialTags = partialTags - tag }, modifier = Modifier.size(16.dp)) {
+                                            Icon(Icons.Rounded.Close, "Retirer", tint = TextSecondary, modifier = Modifier.size(14.dp))
+                                        }
+                                    },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        containerColor = SurfaceDark,
+                                        labelColor = TealAccent,
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                )
+                            }
+                        }
+                    }
                 } else {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(bottom = 10.dp)
-                    ) {
-                        tags.forEach { tag ->
-                            InputChip(
-                                selected = true,
-                                onClick = { tags = tags - tag },
-                                label = { Text("#$tag") },
-                                trailingIcon = { Icon(Icons.Rounded.Close, "Supprimer", Modifier.size(16.dp)) },
-                                colors = InputChipDefaults.inputChipColors(
-                                    selectedContainerColor = AmberGlow,
-                                    selectedLabelColor = Amber,
-                                    selectedTrailingIconColor = Amber,
-                                ),
-                                shape = RoundedCornerShape(8.dp),
-                            )
+                    // Single file UI
+                    Text(
+                        "Tags actuellement attribués (${tags.size}) :",
+                        style = MaterialTheme.typography.labelSmall.copy(color = Amber),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    if (tags.isEmpty()) {
+                        Text(
+                            "Aucun tag attribué pour l'instant.",
+                            style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary),
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    } else {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(bottom = 10.dp)
+                        ) {
+                            tags.forEach { tag ->
+                                InputChip(
+                                    selected = true,
+                                    onClick = { tags = tags - tag },
+                                    label = { Text("#$tag") },
+                                    trailingIcon = { Icon(Icons.Rounded.Close, "Supprimer", Modifier.size(16.dp)) },
+                                    colors = InputChipDefaults.inputChipColors(
+                                        selectedContainerColor = AmberGlow,
+                                        selectedLabelColor = Amber,
+                                        selectedTrailingIconColor = Amber,
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -621,7 +704,7 @@ fun TagEditDialog(
                 OutlinedTextField(
                     value = inputText,
                     onValueChange = { inputText = it },
-                    label = { Text("Ajouter un tag") },
+                    label = { Text(if (totalSelectedCount > 1) "Ajouter à TOUTES les vidéos" else "Ajouter un tag") },
                     placeholder = { Text("Tapez un mot-clé...") },
                     singleLine = true,
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
@@ -632,6 +715,7 @@ fun TagEditDialog(
                             val newTag = inputText.trim().lowercase().removePrefix("#").trim()
                             if (newTag.isNotEmpty() && !tags.contains(newTag)) {
                                 tags = tags + newTag
+                                partialTags = partialTags - newTag
                                 inputText = ""
                             }
                         }
@@ -645,6 +729,7 @@ fun TagEditDialog(
                             val newTag = inputText.trim().lowercase().removePrefix("#").trim()
                             if (newTag.isNotEmpty() && !tags.contains(newTag)) {
                                 tags = tags + newTag
+                                partialTags = partialTags - newTag
                                 inputText = ""
                             }
                         }) {
@@ -664,6 +749,7 @@ fun TagEditDialog(
                                 selected = false,
                                 onClick = {
                                     if (!tags.contains(sug)) tags = tags + sug
+                                    partialTags = partialTags - sug
                                     inputText = ""
                                 },
                                 label = { Text("💡 #$sug") },

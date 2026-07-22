@@ -157,15 +157,31 @@ fun FolderBrowserScreen(
     }
 
     if (showMultiTagDialog && selectedMedia.isNotEmpty()) {
-        val initialTags = remember(selectedMedia) {
-            selectedMedia.flatMap { it.tags }.distinct().sorted()
+        val totalCount = selectedMedia.size
+        val tagCounts = remember(selectedMedia) {
+            val map = mutableMapOf<String, Int>()
+            selectedMedia.flatMap { it.tags }.forEach { tag ->
+                if (tag.isNotBlank()) {
+                    map[tag] = (map[tag] ?: 0) + 1
+                }
+            }
+            map
         }
+        val commonTags = remember(tagCounts, totalCount) {
+            tagCounts.filter { it.value == totalCount }.keys.toList().sorted()
+        }
+        val partialTags = remember(tagCounts, totalCount) {
+            tagCounts.filter { it.value in 1 until totalCount }
+        }
+
         com.example.videosaver.ui.library.TagEditDialog(
-            initialTags = initialTags,
+            initialTags = commonTags,
             allKnownTags = allKnownTags,
+            totalSelectedCount = totalCount,
+            initialPartialTags = partialTags,
             onDismiss = { showMultiTagDialog = false },
-            onSave = { newTags ->
-                vm.updateTagsForMultiple(selectedMedia.toList(), newTags)
+            onSave = { newCommonTags ->
+                vm.updateTagsForMultiple(selectedMedia.toList(), newCommonTags)
                 showMultiTagDialog = false
                 selectedMedia = emptySet()
             }

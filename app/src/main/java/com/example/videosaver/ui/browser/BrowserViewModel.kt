@@ -154,10 +154,11 @@ class BrowserViewModel(
         }
     }
 
-    fun updateTagsForMultiple(files: List<MediaFile>, tags: List<String>) {
+    fun updateTagsForMultiple(files: List<MediaFile>, tagsToApply: List<String>) {
         viewModelScope.launch {
             files.forEach { media ->
-                repo.updateFileTags(media.file, tags)
+                val mergedTags = (media.tags + tagsToApply).distinct().filter { it.isNotBlank() }
+                repo.updateFileTags(media.file, mergedTags)
             }
             navigateTo(_state.value.currentPath)
         }
