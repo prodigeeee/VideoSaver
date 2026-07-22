@@ -150,13 +150,13 @@ fun VideoPlayerScreen(
 
         AndroidView(
             factory = { ctx ->
-                android.view.TextureView(ctx).apply {
-                    vm.player.setVideoTextureView(this)
+                val view = android.view.LayoutInflater.from(ctx).inflate(com.example.videosaver.R.layout.player_view_texture, null) as PlayerView
+                view.apply {
+                    player = vm.player
+                    setResizeMode(resizeMode)
                 }
             },
-            update = { textureView ->
-                vm.player.setVideoTextureView(textureView)
-            },
+            update = { it.setResizeMode(resizeMode) },
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
