@@ -45,8 +45,27 @@ fun VideoPlayerScreen(
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     var showRatioPicker by remember { mutableStateOf(false) }
+    var showTagDialog   by remember { mutableStateOf(false) }
     val inPip = com.example.videosaver.isInPipMode()
     val showControls = state.showControls && !inPip
+
+    if (showTagDialog) {
+        val currentMedia = state.playlist.getOrNull(state.currentIndex)
+        if (currentMedia != null) {
+            val allKnownTags = remember(state.playlist) {
+                state.playlist.flatMap { it.tags }.distinct().sorted()
+            }
+            com.example.videosaver.ui.library.TagEditDialog(
+                initialTags = currentMedia.tags,
+                allKnownTags = allKnownTags,
+                onDismiss = { showTagDialog = false },
+                onSave = { newTags ->
+                    vm.updateCurrentFileTags(newTags)
+                    showTagDialog = false
+                }
+            )
+        }
+    }
 
     // ── Pinch-to-zoom state ───────────────────────────────────────────────
     var zoomScale by remember { mutableFloatStateOf(1f) }
@@ -223,6 +242,11 @@ fun VideoPlayerScreen(
                     }
                     IconButton(onClick = vm::cycleLoopMode) {
                         Icon(loopIcon, "Boucle", tint = loopTint)
+                    }
+
+                    // Tag button
+                    IconButton(onClick = { showTagDialog = true }) {
+                        Icon(Icons.Rounded.Tag, "Gérer les tags", tint = Amber)
                     }
 
                     // Aspect ratio button

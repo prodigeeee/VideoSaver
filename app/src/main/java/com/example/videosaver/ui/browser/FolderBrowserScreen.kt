@@ -71,11 +71,16 @@ fun FolderBrowserScreen(
     var mediaFilter     by remember(state.folderPrefs) { mutableStateOf<String?>(state.folderPrefs.mediaFilter) }
     var sizeFilter      by remember(state.folderPrefs) { mutableStateOf<String?>(state.folderPrefs.sizeFilter) }
     var dimensionFilter by remember(state.folderPrefs) { mutableStateOf<String?>(state.folderPrefs.dimensionFilter) }
-    var tagFilter       by remember(state.folderPrefs) { mutableStateOf<String?>(state.folderPrefs.tagFilter) }
+    var tagFilters      by remember(state.folderPrefs) {
+        mutableStateOf(
+            state.folderPrefs.tagFilter?.split(",")?.filter { it.isNotBlank() }?.toSet() ?: emptySet()
+        )
+    }
 
     // Commit changes to VM when they change
-    LaunchedEffect(columns, sortBy, mediaFilter, sizeFilter, dimensionFilter, tagFilter) {
-        vm.updateFolderPrefs(columns, sortBy.name, mediaFilter, sizeFilter, dimensionFilter, tagFilter)
+    LaunchedEffect(columns, sortBy, mediaFilter, sizeFilter, dimensionFilter, tagFilters) {
+        val tagParam = if (tagFilters.isEmpty()) null else tagFilters.joinToString(",")
+        vm.updateFolderPrefs(columns, sortBy.name, mediaFilter, sizeFilter, dimensionFilter, tagParam)
     }
 
     // Scroll state persistence per path
@@ -111,9 +116,14 @@ fun FolderBrowserScreen(
         selectedMedia = emptySet()
     }
 
+    val allKnownTags = remember(state.mediaInCurrentDir) {
+        state.mediaInCurrentDir.flatMap { it.tags }.distinct().sorted()
+    }
+
     if (tagDialogMedia != null) {
         com.example.videosaver.ui.library.TagEditDialog(
             initialTags = tagDialogMedia!!.tags,
+            allKnownTags = allKnownTags,
             onDismiss = { tagDialogMedia = null },
             onSave = { newTags ->
                 vm.updateFileTags(tagDialogMedia!!, newTags)
@@ -128,6 +138,7 @@ fun FolderBrowserScreen(
         }
         com.example.videosaver.ui.library.TagEditDialog(
             initialTags = initialTags,
+            allKnownTags = allKnownTags,
             onDismiss = { showMultiTagDialog = false },
             onSave = { newTags ->
                 vm.updateTagsForMultiple(selectedMedia.toList(), newTags)
@@ -171,11 +182,11 @@ fun FolderBrowserScreen(
     }
 
     val availableTags = remember(state.mediaInCurrentDir) {
-        state.mediaInCurrentDir.flatMap { it.tags }.distinct().sorted()
+        listOf("UNTAGGED") + state.mediaInCurrentDir.flatMap { it.tags }.distinct().sorted()
     }
 
     // Sorted + filtered media in current dir
-    val sortedMedia = remember(state.mediaInCurrentDir, sortBy, mediaFilter, sizeFilter, dimensionFilter, tagFilter) {
+    val sortedMedia = remember(state.mediaInCurrentDir, sortBy, mediaFilter, sizeFilter, dimensionFilter, tagFilters) {
         state.mediaInCurrentDir
             .filter { f ->
                 val mediaMatch = when (mediaFilter) {
@@ -197,7 +208,15 @@ fun FolderBrowserScreen(
                     "4K"        -> maxOf(f.videoWidth, f.videoHeight) >= 3840 || minOf(f.videoWidth, f.videoHeight) >= 2160
                     else        -> true
                 }
-                val tagMatch = tagFilter == null || f.tags.contains(tagFilter)
+                val tagMatch = if (tagFilters.isEmpty()) true else {
+                    val wantsUntagged = tagFilters.contains("UNTAGGED")
+                    val selectedNormalTags = tagFilters.filter { it != "UNTAGGED" }
+                    val untaggedOk = wantsUntagged && f.tags.isEmpty()
+                    val normalOk = selectedNormalTags.isNotEmpty() && selectedNormalTags.all { f.tags.contains(it) }
+                    if (wantsUntagged && selectedNormalTags.isNotEmpty()) untaggedOk || normalOk
+                    else if (wantsUntagged) untaggedOk
+                    else normalOk
+                }
 
                 mediaMatch && sizeMatch && dimMatch && tagMatch
             }
@@ -445,10 +464,13 @@ fun FolderBrowserScreen(
 
                                         // Tags
                                         items(availableTags) { tag ->
+                                            val isSel = tagFilters.contains(tag)
                                             FilterChip(
-                                                selected = tagFilter == tag,
-                                                onClick = { tagFilter = if (tagFilter == tag) null else tag },
-                                                label = { Text("#$tag", style = MaterialTheme.typography.labelSmall) },
+                                                selected = isSel,
+                                                onClick = {
+                                                    tagFilters = if (isSel) tagFilters - tag else tagFilters + tag
+                                                },
+                                                label = { Text(if (tag == "UNTAGGED") "🚫 Sans tag" else "#$tag", style = MaterialTheme.typography.labelSmall) },
                                                 colors = FilterChipDefaults.filterChipColors(
                                                     selectedContainerColor = AmberGlow,
                                                     selectedLabelColor     = Amber,
@@ -796,10 +818,13 @@ fun FolderBrowserScreen(
                                         }
 
                                         items(availableTags) { tag ->
+                                            val isSel = tagFilters.contains(tag)
                                             FilterChip(
-                                                selected = tagFilter == tag,
-                                                onClick  = { tagFilter = if (tagFilter == tag) null else tag },
-                                                label    = { Text("#$tag") },
+                                                selected = isSel,
+                                                onClick  = {
+                                                    tagFilters = if (isSel) tagFilters - tag else tagFilters + tag
+                                                },
+                                                label    = { Text(if (tag == "UNTAGGED") "🚫 Sans tag" else "#$tag") },
                                                 colors   = FilterChipDefaults.filterChipColors(
                                                     selectedContainerColor   = AmberGlow,
                                                     selectedLabelColor       = Amber,

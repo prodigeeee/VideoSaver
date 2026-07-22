@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.example.videosaver.data.BrowserRepository
 import com.example.videosaver.data.MediaFile
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
@@ -38,6 +39,8 @@ data class PlayerUiState(
 )
 
 class VideoPlayerViewModel(context: Context) : ViewModel() {
+
+    private val repo = BrowserRepository(context.applicationContext)
 
     val player: ExoPlayer = ExoPlayer.Builder(context)
         .setHandleAudioBecomingNoisy(true) // pause on headphone unplug → prevents audio freeze
@@ -144,6 +147,16 @@ class VideoPlayerViewModel(context: Context) : ViewModel() {
         autoHideJob = viewModelScope.launch {
             delay(3500)
             _state.update { it.copy(showControls = false) }
+        }
+    }
+
+    fun updateCurrentFileTags(tags: List<String>) {
+        val currentMedia = _state.value.playlist.getOrNull(_state.value.currentIndex) ?: return
+        viewModelScope.launch {
+            repo.updateFileTags(currentMedia.file, tags)
+            val updatedPlaylist = _state.value.playlist.toMutableList()
+            updatedPlaylist[_state.value.currentIndex] = currentMedia.copy(tags = tags)
+            _state.update { it.copy(playlist = updatedPlaylist) }
         }
     }
 

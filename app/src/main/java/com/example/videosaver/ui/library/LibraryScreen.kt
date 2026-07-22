@@ -561,11 +561,17 @@ private fun MediaCard(
 @Composable
 fun TagEditDialog(
     initialTags: List<String>,
+    allKnownTags: List<String> = emptyList(),
     onDismiss: () -> Unit,
     onSave: (List<String>) -> Unit
 ) {
     var tags by remember { mutableStateOf(initialTags) }
     var inputText by remember { mutableStateOf("") }
+
+    val suggestions = remember(inputText, allKnownTags, tags) {
+        if (inputText.trim().isEmpty()) emptyList()
+        else allKnownTags.filter { it.contains(inputText.trim(), ignoreCase = true) && !tags.contains(it) }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -596,6 +602,30 @@ fun TagEditDialog(
                         }
                     }
                 )
+
+                if (suggestions.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    Text("Suggestions :", style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary))
+                    Spacer(Modifier.height(4.dp))
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        items(suggestions) { sug ->
+                            FilterChip(
+                                selected = false,
+                                onClick = {
+                                    if (!tags.contains(sug)) tags = tags + sug
+                                    inputText = ""
+                                },
+                                label = { Text("#$sug") },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    containerColor = AmberGlow,
+                                    labelColor = Amber,
+                                ),
+                                shape = RoundedCornerShape(6.dp),
+                            )
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(12.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     items(tags) { tag ->
