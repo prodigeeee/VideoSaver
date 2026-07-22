@@ -72,6 +72,8 @@ class VideoPlayerViewModel(context: Context) : ViewModel() {
     val state: StateFlow<PlayerUiState> = _state.asStateFlow()
 
     init {
+        player.setSeekParameters(androidx.media3.exoplayer.SeekParameters.CLOSEST_SYNC)
+
         // Single listener — avoids race condition from duplicate onIsPlayingChanged calls
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -117,6 +119,7 @@ class VideoPlayerViewModel(context: Context) : ViewModel() {
 
     /** Load a playlist starting at [startIndex] */
     fun loadPlaylist(files: List<MediaFile>, startIndex: Int = 0) {
+        player.setSeekParameters(androidx.media3.exoplayer.SeekParameters.CLOSEST_SYNC)
         // Uri.fromFile is more reliable than string "file://" for paths with special chars
         val items = files.map { MediaItem.fromUri(android.net.Uri.fromFile(it.file)) }
         player.setMediaItems(items, startIndex, 0L)
@@ -136,17 +139,23 @@ class VideoPlayerViewModel(context: Context) : ViewModel() {
     fun togglePlayPause() = if (player.isPlaying) player.pause() else player.play()
 
     fun seekTo(posMs: Long) {
+        player.setSeekParameters(androidx.media3.exoplayer.SeekParameters.CLOSEST_SYNC)
         player.seekTo(posMs)
         showControls()
     }
 
     fun skipForward(ms: Long = 10_000L) {
-        player.seekTo((player.currentPosition + ms).coerceAtMost(player.duration))
+        player.setSeekParameters(androidx.media3.exoplayer.SeekParameters.CLOSEST_SYNC)
+        val dur = player.duration.coerceAtLeast(0L)
+        val target = if (dur > 0) (player.currentPosition + ms).coerceAtMost(dur) else player.currentPosition + ms
+        player.seekTo(target)
         showControls()
     }
 
     fun skipBackward(ms: Long = 10_000L) {
-        player.seekTo((player.currentPosition - ms).coerceAtLeast(0L))
+        player.setSeekParameters(androidx.media3.exoplayer.SeekParameters.CLOSEST_SYNC)
+        val target = (player.currentPosition - ms).coerceAtLeast(0L)
+        player.seekTo(target)
         showControls()
     }
 
