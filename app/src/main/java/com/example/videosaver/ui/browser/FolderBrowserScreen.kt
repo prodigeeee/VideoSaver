@@ -134,6 +134,24 @@ fun FolderBrowserScreen(
 
     LaunchedEffect(state.currentPath) {
         selectedMedia = emptySet()
+        tagFilters = emptySet()
+        tagSearchQuery = ""
+    }
+
+    if (actionSheetType != null) {
+        com.example.videosaver.ui.components.MoveFileSheet(
+            favorites = favorites,
+            onSelectFolder = { targetFolder ->
+                if (actionSheetType == "MOVE") {
+                    vm.moveSelected(selectedMedia.toList(), targetFolder)
+                } else {
+                    vm.copySelected(selectedMedia.toList(), targetFolder)
+                }
+                selectedMedia = emptySet()
+                actionSheetType = null
+            },
+            onDismiss = { actionSheetType = null }
+        )
     }
 
     val allKnownTags = remember(state.mediaInCurrentDir, state.allKnownTags) {
@@ -1234,12 +1252,36 @@ private fun TagFilterToolbar(
 
                     Spacer(Modifier.height(6.dp))
 
-                    // Row of active filter chips (Type + Size + Dimensions + Untagged / Active Tags)
+                    // Row of active filter chips (Active Selected Tags FIRST, then Type + Size + Dimensions + Unselected Tags)
                     LazyRow(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        // Types
+                        // 1. ACTIVE SELECTED TAGS FIRST (Position 0!)
+                        val activeTagsList = selectedTags.toList()
+                        if (activeTagsList.isNotEmpty()) {
+                            items(activeTagsList) { tag ->
+                                FilterChip(
+                                    selected = true,
+                                    onClick = { onToggleTag(tag) },
+                                    label = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(if (tag == "UNTAGGED") "🚫 Sans tag" else "#$tag", style = MaterialTheme.typography.labelSmall)
+                                            Spacer(Modifier.width(4.dp))
+                                            Icon(Icons.Rounded.Close, "Retirer", modifier = Modifier.size(12.dp))
+                                        }
+                                    },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = Amber,
+                                        selectedLabelColor = Color.Black,
+                                        selectedTrailingIconColor = Color.Black,
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                )
+                            }
+                        }
+
+                        // 2. Types
                         items(listOf(null to "Tous", "video" to "Vidéos", "image" to "Images", "audio" to "Audio")) { (key, lbl) ->
                             FilterChip(
                                 selected = mediaFilter == key,
@@ -1255,7 +1297,7 @@ private fun TagFilterToolbar(
                             )
                         }
 
-                        // Size
+                        // 3. Size
                         items(listOf("<100M" to "<100M", "100M-1G" to "100M-1G", ">1G" to ">1G")) { (key, lbl) ->
                             FilterChip(
                                 selected = sizeFilter == key,
@@ -1271,7 +1313,7 @@ private fun TagFilterToolbar(
                             )
                         }
 
-                        // Dimension
+                        // 4. Dimension
                         items(listOf("PORTRAIT" to "📱 Portrait", "LANDSCAPE" to "🖼️ Paysage", "HD" to "HD", "4K" to "4K")) { (key, lbl) ->
                             FilterChip(
                                 selected = dimensionFilter == key,
@@ -1287,24 +1329,14 @@ private fun TagFilterToolbar(
                             )
                         }
 
-                        // Tags (Active selected tags FIRST, then UNTAGGED + remaining tags)
-                        items(orderedTags) { tag ->
-                            val isSel = selectedTags.contains(tag)
+                        // 5. Remaining Unselected Tags
+                        val unselectedTags = availableTags.filter { !selectedTags.contains(it) }
+                        items(unselectedTags) { tag ->
                             FilterChip(
-                                selected = isSel,
+                                selected = false,
                                 onClick = { onToggleTag(tag) },
-                                label = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(if (tag == "UNTAGGED") "🚫 Sans tag" else "#$tag", style = MaterialTheme.typography.labelSmall)
-                                        if (isSel) {
-                                            Spacer(Modifier.width(4.dp))
-                                            Icon(Icons.Rounded.Close, null, modifier = Modifier.size(12.dp))
-                                        }
-                                    }
-                                },
+                                label = { Text(if (tag == "UNTAGGED") "🚫 Sans tag" else "#$tag", style = MaterialTheme.typography.labelSmall) },
                                 colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = AmberGlow,
-                                    selectedLabelColor = Amber,
                                     containerColor = GlassWhite,
                                     labelColor = TextSecondary,
                                 ),

@@ -48,14 +48,18 @@ fun VideoPlayerScreen(
     var showTagDialog   by remember { mutableStateOf(false) }
     val inPip = com.example.videosaver.isInPipMode()
     val showControls = state.showControls && !inPip
+    val context = LocalContext.current
+    val repo = remember(context) { com.example.videosaver.data.BrowserRepository(context.applicationContext) }
+    var allKnownTags by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    LaunchedEffect(Unit) {
+        allKnownTags = repo.getAllKnownTags()
+    }
 
     if (showTagDialog) {
         val currentMedia = state.playlist.getOrNull(state.currentIndex)
         if (currentMedia != null) {
-            val context = LocalContext.current
-            val repo = remember(context) { com.example.videosaver.data.BrowserRepository(context.applicationContext) }
             var currentTags by remember(currentMedia) { mutableStateOf(currentMedia.tags) }
-            var allKnownTags by remember { mutableStateOf<List<String>>(emptyList()) }
 
             LaunchedEffect(currentMedia) {
                 val scanned = repo.scanMediaFiles(currentMedia.file.parentFile ?: currentMedia.file)
@@ -71,6 +75,7 @@ fun VideoPlayerScreen(
                 allKnownTags = allKnownTags,
                 onDismiss = { showTagDialog = false },
                 onSave = { newTags ->
+                    currentTags = newTags
                     vm.updateCurrentFileTags(newTags)
                     showTagDialog = false
                 }
@@ -306,13 +311,25 @@ fun VideoPlayerScreen(
                         .align(Alignment.BottomCenter)
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                 ) {
-                    val progress = if (state.duration > 0) {
+                    var isSeeking by remember { mutableStateOf(false) }
+                    var seekPos by remember { mutableFloatStateOf(0f) }
+
+                    val progress = if (isSeeking) seekPos else if (state.duration > 0) {
                         state.position.toFloat() / state.duration.toFloat()
                     } else 0f
 
+                    val displayPos = if (isSeeking && state.duration > 0) (seekPos * state.duration).toLong() else state.position
+
                     Slider(
-                        value = progress,
-                        onValueChange = { vm.seekTo((it * state.duration).toLong()) },
+                        value = progress.coerceIn(0f, 1f),
+                        onValueChange = {
+                            isSeeking = true
+                            seekPos = it
+                        },
+                        onValueChangeFinished = {
+                            vm.seekTo((seekPos * state.duration).toLong())
+                            isSeeking = false
+                        },
                         colors = SliderDefaults.colors(
                             thumbColor         = Amber,
                             activeTrackColor   = Amber,
@@ -322,7 +339,7 @@ fun VideoPlayerScreen(
                     )
 
                     Text(
-                        "${formatMs(state.position)} / ${formatMs(state.duration)}",
+                        "${formatMs(displayPos)} / ${formatMs(state.duration)}",
                         style = MaterialTheme.typography.bodySmall.copy(color = Color.White.copy(0.8f)),
                     )
                 }

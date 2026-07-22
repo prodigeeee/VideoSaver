@@ -50,6 +50,9 @@ class BrowserRepository(
     private val downloadDao: DownloadDao = AppDatabase.getInstance(context).downloadDao(),
     private val fileTagDao: FileTagDao = AppDatabase.getInstance(context).fileTagDao(),
 ) {
+    companion object {
+        private val dimensionsCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Int, Int>>()
+    }
     private val prefs = context.getSharedPreferences("videosaver_prefs", Context.MODE_PRIVATE)
     private fun showHiddenFiles(): Boolean = prefs.getBoolean("show_hidden_files", false)
 
@@ -234,7 +237,7 @@ class BrowserRepository(
                         tags = readPhysicalFileTags(f)
                     }
                     if (isVideoFile(f)) {
-                        val (w, h) = getVideoDimensions(f)
+                        val (w, h) = dimensionsCache[f.absolutePath] ?: getVideoDimensions(f)
                         results.add(toMediaFile(f, isVideo = true, width = w, height = h, tags = tags))
                     }
                     else if (isAudioFile(f)) results.add(toMediaFile(f, isAudio = true, tags = tags))
@@ -257,6 +260,8 @@ class BrowserRepository(
     }
 
     private fun getVideoDimensions(f: File): Pair<Int, Int> {
+        val cached = dimensionsCache[f.absolutePath]
+        if (cached != null) return cached
         return try {
             val retriever = android.media.MediaMetadataRetriever()
             retriever.setDataSource(f.absolutePath)
