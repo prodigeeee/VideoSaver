@@ -179,6 +179,41 @@ fun VideoPlayerScreen(
             )
         }
 
+        // ── Playback Error Banner ──────────────────────────────────────────────
+        if (state.hasError) {
+            Surface(
+                color = SurfaceDark.copy(alpha = 0.95f),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(24.dp),
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(Icons.Rounded.Warning, "Erreur", tint = Amber, modifier = Modifier.size(44.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        state.errorMessage ?: "Format vidéo non lisible directement",
+                        style = MaterialTheme.typography.bodyMedium.copy(color = Color.White),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (state.totalFiles > 1) {
+                            Button(
+                                onClick = vm::playNext,
+                                colors = ButtonDefaults.buttonColors(containerColor = Amber, contentColor = Color.Black),
+                            ) {
+                                Text("Vidéo suivante ⏭️")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // ── Gradient overlays (top + bottom) ───────────────────────────────────
         AnimatedVisibility(
             visible = showControls,

@@ -36,14 +36,36 @@ data class PlayerUiState(
     val totalFiles: Int = 1,
     val playlist: List<MediaFile> = emptyList(),
     val isBuffering: Boolean = false,
+    val hasError: Boolean = false,
+    val errorMessage: String? = null,
 )
 
 class VideoPlayerViewModel(context: Context) : ViewModel() {
 
     private val repo = BrowserRepository(context.applicationContext)
 
-    val player: ExoPlayer = ExoPlayer.Builder(context)
-        .setHandleAudioBecomingNoisy(true) // pause on headphone unplug → prevents audio freeze
+    private val extractorsFactory = androidx.media3.extractor.DefaultExtractorsFactory()
+        .setConstantBitrateSeekingEnabled(true)
+        .setConstantBitrateSeekingAlwaysEnabled(true)
+
+    private val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(context)
+        .setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+        .setEnableDecoderFallback(true)
+
+    private val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+        .setBufferDurationsMs(
+            2500,  // minBufferMs
+            30000, // maxBufferMs
+            1000,  // bufferForPlaybackMs
+            2000   // bufferForPlaybackAfterRebufferMs
+        )
+        .setPrioritizeTimeOverSizeThresholds(true)
+        .build()
+
+    val player: ExoPlayer = ExoPlayer.Builder(context, renderersFactory)
+        .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(context, extractorsFactory))
+        .setLoadControl(loadControl)
+        .setHandleAudioBecomingNoisy(true)
         .build()
 
     private val _state = MutableStateFlow(PlayerUiState())
@@ -64,6 +86,15 @@ class VideoPlayerViewModel(context: Context) : ViewModel() {
                 _state.update { it.copy(
                     currentIndex = idx,
                     title = it.playlist.getOrNull(idx)?.name ?: "",
+                    hasError = false,
+                    errorMessage = null,
+                )}
+            }
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                _state.update { it.copy(
+                    isBuffering = false,
+                    hasError = true,
+                    errorMessage = "Codec ou format vidéo non lisible : ${error.localizedMessage ?: "Fichier corrompu"}"
                 )}
             }
         })
