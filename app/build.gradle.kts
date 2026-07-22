@@ -115,4 +115,7 @@ dependencies {
   implementation(libs.androidx.media3.ui)
   implementation(libs.androidx.media3.session)
   implementation(libs.androidx.media3.common)
+
+  // ExifInterface for reading/writing EXIF metadata on image files
+  implementation("androidx.exifinterface:exifinterface:1.3.7")
 }

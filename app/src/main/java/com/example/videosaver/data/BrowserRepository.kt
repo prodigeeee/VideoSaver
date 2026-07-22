@@ -279,6 +279,71 @@ class BrowserRepository(
         tags         = tags,
     )
 
+    suspend fun updateFileTags(file: File, tags: List<String>) = withContext(Dispatchers.IO) {
+        val existing = downloadDao.getByFilePath(file.absolutePath)
+        if (existing != null) {
+            downloadDao.updateTags(existing.id, tags)
+        } else {
+            val isVideo = isVideoFile(file)
+            val isAudio = isAudioFile(file)
+            val entity = DownloadEntity(
+                url = "file://${file.absolutePath}",
+                title = file.nameWithoutExtension,
+                thumbnailUrl = if (isVideo || file.extension.lowercase() in setOf("jpg", "jpeg", "png", "webp")) file.absolutePath else null,
+                filePath = file.absolutePath,
+                fileSize = file.length(),
+                quality = "Local",
+                formatId = file.extension.lowercase(),
+                isAudioOnly = isAudio,
+                audioFormat = if (isAudio) file.extension.lowercase() else "mp3",
+                status = DownloadStatus.COMPLETED,
+                tags = tags,
+                completedAt = file.lastModified(),
+            )
+            downloadDao.insert(entity)
+        }
+
+        // 1. Physical metadata: EXIF UserComment for images
+        val ext = file.extension.lowercase()
+        if (ext in setOf("jpg", "jpeg", "png", "webp") && file.canWrite()) {
+            try {
+                val exif = androidx.exifinterface.media.ExifInterface(file)
+                exif.setAttribute(androidx.exifinterface.media.ExifInterface.TAG_USER_COMMENT, tags.joinToString(", "))
+                exif.saveAttributes()
+            } catch (e: Exception) {
+                // Ignore if read-only or unsupported format
+            }
+        }
+
+        // 2. Physical metadata: Sidecar XMP file for video/audio/other files
+        val xmpFile = File("${file.absolutePath}.xmp")
+        if (tags.isEmpty()) {
+            if (xmpFile.exists()) xmpFile.delete()
+        } else {
+            try {
+                val tagsXml = tags.joinToString("\n") { "       <rdf:li>$it</rdf:li>" }
+                val xmpContent = """
+                    <?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+                    <x:xmpmeta xmlns:x="adobe:ns:meta/">
+                     <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+                      <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">
+                       <dc:subject>
+                        <rdf:Bag>
+                    $tagsXml
+                        </rdf:Bag>
+                       </dc:subject>
+                      </rdf:Description>
+                     </rdf:RDF>
+                    </x:xmpmeta>
+                    <?xpacket end="w"?>
+                """.trimIndent()
+                xmpFile.writeText(xmpContent)
+            } catch (e: Exception) {
+                // Ignore if cannot write
+            }
+        }
+    }
+
     private fun friendlyName(f: File): String = when (f.name) {
         "VideoSaver"                           -> "⭐ VideoSaver"
         Environment.DIRECTORY_DOWNLOADS       -> "📥 Téléchargements"

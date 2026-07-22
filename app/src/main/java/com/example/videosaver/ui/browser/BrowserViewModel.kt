@@ -147,6 +147,13 @@ class BrowserViewModel(
         }
     }
 
+    fun updateFileTags(media: MediaFile, tags: List<String>) {
+        viewModelScope.launch {
+            repo.updateFileTags(media.file, tags)
+            navigateTo(_state.value.currentPath)
+        }
+    }
+
     class Factory(private val context: Context) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =

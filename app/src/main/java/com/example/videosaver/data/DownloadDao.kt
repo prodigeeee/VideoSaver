@@ -30,6 +30,9 @@ interface DownloadDao {
     @Query("SELECT * FROM downloads WHERE id = :id")
     suspend fun getById(id: Long): DownloadEntity?
 
+    @Query("SELECT * FROM downloads WHERE filePath = :filePath LIMIT 1")
+    suspend fun getByFilePath(filePath: String): DownloadEntity?
+
     @Query("DELETE FROM downloads WHERE id = :id")
     suspend fun deleteById(id: Long)
 

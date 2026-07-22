@@ -104,9 +104,21 @@ fun FolderBrowserScreen(
     var selectedMedia by remember { mutableStateOf(emptySet<MediaFile>()) }
     val inSelectionMode = selectedMedia.isNotEmpty()
     var actionSheetType by remember { mutableStateOf<String?>(null) } // "COPY" or "MOVE"
+    var tagDialogMedia by remember { mutableStateOf<MediaFile?>(null) }
 
     LaunchedEffect(state.currentPath) {
         selectedMedia = emptySet()
+    }
+
+    if (tagDialogMedia != null) {
+        com.example.videosaver.ui.library.TagEditDialog(
+            initialTags = tagDialogMedia!!.tags,
+            onDismiss = { tagDialogMedia = null },
+            onSave = { newTags ->
+                vm.updateFileTags(tagDialogMedia!!, newTags)
+                tagDialogMedia = null
+            }
+        )
     }
 
     if (actionSheetType != null) {
@@ -519,6 +531,7 @@ fun FolderBrowserScreen(
                                             inSelectionMode = inSelectionMode,
                                             onClick         = { onMediaClick(media) },
                                             onLongClick     = { if (!inSelectionMode) selectedMedia = selectedMedia + media },
+                                            onEditTags      = { tagDialogMedia = media },
                                         )
                                     }
                                 }
@@ -557,6 +570,9 @@ fun FolderBrowserScreen(
                             }
                             Text("${selectedMedia.size} sélectionné(s)", style = MaterialTheme.typography.labelLarge)
                             Row {
+                                IconButton(onClick = { if (selectedMedia.size == 1) tagDialogMedia = selectedMedia.first() }) {
+                                    Icon(Icons.Rounded.Tag, "Tags", tint = Amber)
+                                }
                                 IconButton(onClick = { actionSheetType = "COPY" }) {
                                     Icon(Icons.Rounded.ContentCopy, "Copier", tint = Amber)
                                 }
@@ -860,7 +876,8 @@ fun FolderBrowserScreen(
                                             onClick         = { onMediaClick(media) },
                                             onLongClick     = {
                                                 if (!inSelectionMode) selectedMedia = selectedMedia + media
-                                            }
+                                            },
+                                            onEditTags      = { tagDialogMedia = media },
                                         )
                                     }
                                 }
@@ -904,6 +921,9 @@ fun FolderBrowserScreen(
                         }
                         Text("${selectedMedia.size} sélectionné(s)", style = MaterialTheme.typography.labelLarge)
                         Row {
+                            IconButton(onClick = { if (selectedMedia.size == 1) tagDialogMedia = selectedMedia.first() }) {
+                                Icon(Icons.Rounded.Tag, "Tags", tint = Amber)
+                            }
                             IconButton(onClick = { actionSheetType = "COPY" }) {
                                 Icon(Icons.Rounded.ContentCopy, "Copier", tint = Amber)
                             }
@@ -936,6 +956,7 @@ private fun MediaGridCard(
     inSelectionMode: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    onEditTags: (() -> Unit)? = null,
 ) {
     val accentColor = if (media.isVideo) Amber else TealAccent
     val aspectRatio = when (columns) {
@@ -1003,17 +1024,33 @@ private fun MediaGridCard(
                     }
                 }
 
-                // Format badge (top-end)
-                Surface(
-                    color  = accentColor.copy(0.2f),
-                    shape  = RoundedCornerShape(5.dp),
-                    modifier = Modifier.align(Alignment.TopEnd).padding(5.dp),
+                // Format badge & tag edit button (top-end)
+                Row(
+                    modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    Text(
-                        media.extension.uppercase().take(4),
-                        style = MaterialTheme.typography.labelSmall.copy(color = accentColor),
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
-                    )
+                    if (onEditTags != null && !inSelectionMode) {
+                        Surface(
+                            color = Color.Black.copy(0.5f),
+                            shape = CircleShape,
+                            modifier = Modifier.size(24.dp).clickable { onEditTags() }
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Rounded.Tag, "Gérer les tags", tint = Amber, modifier = Modifier.size(14.dp))
+                            }
+                        }
+                    }
+                    Surface(
+                        color  = accentColor.copy(0.2f),
+                        shape  = RoundedCornerShape(5.dp),
+                    ) {
+                        Text(
+                            media.extension.uppercase().take(4),
+                            style = MaterialTheme.typography.labelSmall.copy(color = accentColor),
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                        )
+                    }
                 }
 
                 // Filename at bottom (only for 1–2 col)
