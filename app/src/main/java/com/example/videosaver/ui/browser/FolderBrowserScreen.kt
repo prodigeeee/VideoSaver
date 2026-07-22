@@ -136,77 +136,16 @@ fun FolderBrowserScreen(
         selectedMedia = emptySet()
     }
 
-    val allKnownTags = remember(state.mediaInCurrentDir) {
-        state.mediaInCurrentDir.flatMap { it.tags }.distinct().sorted()
+    val allKnownTags = remember(state.mediaInCurrentDir, state.allKnownTags) {
+        (state.mediaInCurrentDir.flatMap { it.tags } + state.allKnownTags).distinct().filter { it.isNotBlank() }.sorted()
     }
 
-    if (tagDialogMedia != null) {
-        com.example.videosaver.ui.library.TagEditDialog(
-            initialTags = tagDialogMedia!!.tags,
-            allKnownTags = allKnownTags,
-            onDismiss = { tagDialogMedia = null },
-            onSave = { newTags ->
-                vm.updateFileTags(tagDialogMedia!!, newTags)
-                tagDialogMedia = null
-            }
-        )
-    }
-
-    if (showMultiTagDialog && selectedMedia.isNotEmpty()) {
-        val initialTags = remember(selectedMedia) {
-            selectedMedia.flatMap { it.tags }.distinct().sorted()
-        }
-        com.example.videosaver.ui.library.TagEditDialog(
-            initialTags = initialTags,
-            allKnownTags = allKnownTags,
-            onDismiss = { showMultiTagDialog = false },
-            onSave = { newTags ->
-                vm.updateTagsForMultiple(selectedMedia.toList(), newTags)
-                showMultiTagDialog = false
-                selectedMedia = emptySet()
-            }
-        )
-    }
-
-    if (actionSheetType != null) {
-        com.example.videosaver.ui.components.MoveFileSheet(
-            favorites = favorites,
-            onSelectFolder = { folder ->
-                if (actionSheetType == "MOVE") {
-                    vm.moveSelected(selectedMedia.toList(), folder)
-                } else {
-                    vm.copySelected(selectedMedia.toList(), folder)
-                }
-                selectedMedia = emptySet()
-                actionSheetType = null
-            },
-            onDismiss = { actionSheetType = null }
-        )
-    }
-
-    // Storage permission
-    val permLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { vm.navigateTo(state.currentPath) }
-    
-    LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permLauncher.launch(arrayOf(
-                Manifest.permission.READ_MEDIA_VIDEO,
-                Manifest.permission.READ_MEDIA_AUDIO,
-                Manifest.permission.READ_MEDIA_IMAGES
-            ))
-        } else {
-            permLauncher.launch(arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE))
-        }
-    }
-
-    val availableTags = remember(state.mediaInCurrentDir) {
-        listOf("UNTAGGED") + state.mediaInCurrentDir.flatMap { it.tags }.distinct().sorted()
+    val availableTags = remember(allKnownTags) {
+        listOf("UNTAGGED") + allKnownTags
     }
 
     // Sorted + filtered media in current dir
-    val sortedMedia = remember(state.mediaInCurrentDir, sortBy, mediaFilter, sizeFilter, dimensionFilter, tagFilters) {
+    val sortedMedia = remember(state.mediaInCurrentDir, sortBy, mediaFilter, sizeFilter, dimensionFilter, tagFilters, tagSearchQuery) {
         state.mediaInCurrentDir
             .filter { f ->
                 val mediaMatch = when (mediaFilter) {
@@ -237,8 +176,12 @@ fun FolderBrowserScreen(
                     else if (wantsUntagged) untaggedOk
                     else normalOk
                 }
+                val queryMatch = if (tagSearchQuery.trim().isEmpty()) true else {
+                    val q = tagSearchQuery.trim()
+                    f.tags.any { it.contains(q, ignoreCase = true) } || f.name.contains(q, ignoreCase = true)
+                }
 
-                mediaMatch && sizeMatch && dimMatch && tagMatch
+                mediaMatch && sizeMatch && dimMatch && tagMatch && queryMatch
             }
             .let { list ->
                 when (sortBy) {

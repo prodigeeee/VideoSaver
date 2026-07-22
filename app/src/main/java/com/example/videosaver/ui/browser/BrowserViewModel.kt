@@ -21,6 +21,7 @@ data class BrowserUiState(
     val isLoading: Boolean = false,
     val isFavorite: Boolean = false,
     val mediaInCurrentDir: List<MediaFile> = emptyList(),
+    val allKnownTags: List<String> = emptyList(),
     val folderPrefs: FolderPrefs = FolderPrefs(),
     val scrollPositions: Map<String, Pair<Int, Int>> = emptyMap(),
 )
@@ -59,6 +60,7 @@ class BrowserViewModel(
             val entries = repo.listDirectory(dir)
             val isFav = repo.isFavorite(dir.absolutePath)
             val media = repo.scanMediaFiles(dir)
+            val allKnown = repo.getAllKnownTags()
             val crumb = buildBreadcrumb(dir)
             val prefs = repo.getFolderPrefs(dir)
             _state.update {
@@ -69,6 +71,7 @@ class BrowserViewModel(
                     isLoading         = false,
                     isFavorite        = isFav,
                     mediaInCurrentDir = media,
+                    allKnownTags      = allKnown,
                     folderPrefs       = prefs,
                 )
             }

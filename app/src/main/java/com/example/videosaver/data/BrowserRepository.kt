@@ -183,9 +183,16 @@ class BrowserRepository(
         val results = mutableListOf<MediaFile>()
 
         val tagsMap = try {
-            val fromDl = downloadDao.getCompletedDownloadsList().associate { it.filePath to it.tags }
-            val fromFileTag = fileTagDao.getAllFileTags().associate { it.filePath to it.tags }
-            fromDl + fromFileTag
+            val map = mutableMapOf<String, List<String>>()
+            downloadDao.getCompletedDownloadsList().forEach {
+                map[it.filePath] = it.tags
+                try { map[File(it.filePath).canonicalPath] = it.tags } catch (_: Exception) {}
+            }
+            fileTagDao.getAllFileTags().forEach {
+                map[it.filePath] = it.tags
+                try { map[File(it.filePath).canonicalPath] = it.tags } catch (_: Exception) {}
+            }
+            map
         } catch (e: Exception) {
             emptyMap()
         }
@@ -193,7 +200,8 @@ class BrowserRepository(
         dir.listFiles()?.forEach { f ->
             when {
                 !f.isDirectory && (showHidden || !f.name.startsWith(".")) -> {
-                    val tags = tagsMap[f.absolutePath] ?: emptyList()
+                    val canonical = try { f.canonicalPath } catch (_: Exception) { f.absolutePath }
+                    val tags = tagsMap[f.absolutePath] ?: tagsMap[canonical] ?: emptyList()
                     if (isVideoFile(f)) {
                         val (w, h) = getVideoDimensions(f)
                         results.add(toMediaFile(f, isVideo = true, width = w, height = h, tags = tags))
@@ -205,6 +213,16 @@ class BrowserRepository(
         }
         
         results.sortedByDescending { it.lastModified }
+    }
+
+    suspend fun getAllKnownTags(): List<String> = withContext(Dispatchers.IO) {
+        try {
+            val fromDl = downloadDao.getCompletedDownloadsList().flatMap { it.tags }
+            val fromFileTag = fileTagDao.getAllFileTags().flatMap { it.tags }
+            (fromDl + fromFileTag).distinct().filter { it.isNotBlank() }.sorted()
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
     private fun getVideoDimensions(f: File): Pair<Int, Int> {
@@ -283,10 +301,14 @@ class BrowserRepository(
     )
 
     suspend fun updateFileTags(file: File, tags: List<String>) = withContext(Dispatchers.IO) {
+        val canonical = try { file.canonicalPath } catch (e: Exception) { file.absolutePath }
         fileTagDao.insertOrUpdate(FileTagEntity(file.absolutePath, tags))
+        if (canonical != file.absolutePath) {
+            fileTagDao.insertOrUpdate(FileTagEntity(canonical, tags))
+        }
         downloadDao.purgeLocalFileEntries()
 
-        val existing = downloadDao.getByFilePath(file.absolutePath)
+        val existing = downloadDao.getByFilePath(file.absolutePath) ?: downloadDao.getByFilePath(canonical)
         if (existing != null && !existing.url.startsWith("file://")) {
             downloadDao.updateTags(existing.id, tags)
         }
