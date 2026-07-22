@@ -59,23 +59,11 @@ fun VideoPlayerScreen(
     if (showTagDialog) {
         val currentMedia = state.playlist.getOrNull(state.currentIndex)
         if (currentMedia != null) {
-            var currentTags by remember(currentMedia) { mutableStateOf(currentMedia.tags) }
-
-            LaunchedEffect(currentMedia) {
-                val scanned = repo.scanMediaFiles(currentMedia.file.parentFile ?: currentMedia.file)
-                    .find { it.file.absolutePath == currentMedia.file.absolutePath }?.tags
-                if (!scanned.isNullOrEmpty()) {
-                    currentTags = scanned
-                }
-                allKnownTags = repo.getAllKnownTags()
-            }
-
             com.example.videosaver.ui.library.TagEditDialog(
-                initialTags = currentTags,
+                initialTags = currentMedia.tags,
                 allKnownTags = allKnownTags,
                 onDismiss = { showTagDialog = false },
                 onSave = { newTags ->
-                    currentTags = newTags
                     vm.updateCurrentFileTags(newTags)
                     showTagDialog = false
                 }

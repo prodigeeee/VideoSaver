@@ -363,29 +363,34 @@ class BrowserRepository(
 
         // 2. Physical metadata: Sidecar XMP file for video/audio/other files
         val xmpFile = File("${file.absolutePath}.xmp")
-        if (tags.isEmpty()) {
-            if (xmpFile.exists()) xmpFile.delete()
-        } else {
-            try {
-                val tagsXml = tags.joinToString("\n") { "       <rdf:li>$it</rdf:li>" }
-                val xmpContent = """
-                    <?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
-                    <x:xmpmeta xmlns:x="adobe:ns:meta/">
-                     <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-                      <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">
-                       <dc:subject>
-                        <rdf:Bag>
-                    $tagsXml
-                        </rdf:Bag>
-                       </dc:subject>
-                      </rdf:Description>
-                     </rdf:RDF>
-                    </x:xmpmeta>
-                    <?xpacket end="w"?>
-                """.trimIndent()
-                xmpFile.writeText(xmpContent)
-            } catch (e: Exception) {
-                // Ignore if cannot write
+        val canXmpFile = File("${canonical}.xmp")
+        val xmpFilesToUpdate = listOf(xmpFile, canXmpFile).distinctBy { it.absolutePath }
+
+        for (targetXmp in xmpFilesToUpdate) {
+            if (tags.isEmpty()) {
+                if (targetXmp.exists()) targetXmp.delete()
+            } else {
+                try {
+                    val tagsXml = tags.joinToString("\n") { "       <rdf:li>$it</rdf:li>" }
+                    val xmpContent = """
+                        <?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+                        <x:xmpmeta xmlns:x="adobe:ns:meta/">
+                         <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+                          <rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/">
+                           <dc:subject>
+                            <rdf:Bag>
+                        $tagsXml
+                            </rdf:Bag>
+                           </dc:subject>
+                          </rdf:Description>
+                         </rdf:RDF>
+                        </x:xmpmeta>
+                        <?xpacket end="w"?>
+                    """.trimIndent()
+                    targetXmp.writeText(xmpContent)
+                } catch (e: Exception) {
+                    // Ignore if cannot write
+                }
             }
         }
     }

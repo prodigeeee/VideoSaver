@@ -244,12 +244,16 @@ class VideoPlayerViewModel(context: Context) : ViewModel() {
     }
 
     fun updateCurrentFileTags(tags: List<String>) {
-        val currentMedia = _state.value.playlist.getOrNull(_state.value.currentIndex) ?: return
-        viewModelScope.launch {
-            repo.updateFileTags(currentMedia.file, tags)
-            val updatedPlaylist = _state.value.playlist.toMutableList()
-            updatedPlaylist[_state.value.currentIndex] = currentMedia.copy(tags = tags)
+        val st = _state.value
+        val currentMedia = st.playlist.getOrNull(st.currentIndex) ?: return
+        val updatedMedia = currentMedia.copy(tags = tags)
+        val updatedPlaylist = st.playlist.toMutableList()
+        if (st.currentIndex in updatedPlaylist.indices) {
+            updatedPlaylist[st.currentIndex] = updatedMedia
             _state.update { it.copy(playlist = updatedPlaylist) }
+        }
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            repo.updateFileTags(currentMedia.file, tags)
         }
     }
 
