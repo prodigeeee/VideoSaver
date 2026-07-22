@@ -574,7 +574,7 @@ fun TagEditDialog(
 
     val suggestions = remember(inputText, allKnownTags, tags, partialTags) {
         val clean = inputText.trim().lowercase().removePrefix("#").trim()
-        if (clean.isEmpty()) emptyList()
+        if (clean.length < 2) emptyList()
         else allKnownTags.filter { 
             it.lowercase().contains(clean) && !tags.contains(it) 
         }
@@ -739,26 +739,37 @@ fun TagEditDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                if (suggestions.isNotEmpty()) {
+                val cleanTyped = inputText.trim().lowercase().removePrefix("#").trim()
+                if (cleanTyped.length >= 2) {
                     Spacer(Modifier.height(6.dp))
-                    Text("Suggestions d'autocomplétion :", style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary))
+                    Text(
+                        "Suggestions d'autocomplétion (≥ 2 lettres) :",
+                        style = MaterialTheme.typography.labelSmall.copy(color = Amber),
+                    )
                     Spacer(Modifier.height(4.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(suggestions) { sug ->
-                            FilterChip(
-                                selected = false,
-                                onClick = {
-                                    if (!tags.contains(sug)) tags = tags + sug
-                                    partialTags = partialTags - sug
-                                    inputText = ""
-                                },
-                                label = { Text("💡 #$sug") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    containerColor = AmberGlow,
-                                    labelColor = Amber,
-                                ),
-                                shape = RoundedCornerShape(8.dp),
-                            )
+                    if (suggestions.isEmpty()) {
+                        Text(
+                            "Aucun tag correspondant",
+                            style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary),
+                        )
+                    } else {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(suggestions) { sug ->
+                                FilterChip(
+                                    selected = false,
+                                    onClick = {
+                                        if (!tags.contains(sug)) tags = tags + sug
+                                        partialTags = partialTags - sug
+                                        inputText = ""
+                                    },
+                                    label = { Text("💡 #$sug") },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        containerColor = AmberGlow,
+                                        labelColor = Amber,
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                )
+                            }
                         }
                     }
                 }
