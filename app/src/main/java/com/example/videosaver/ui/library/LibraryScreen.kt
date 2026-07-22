@@ -558,6 +558,7 @@ private fun MediaCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TagEditDialog(
     initialTags: List<String>,
@@ -581,10 +582,47 @@ fun TagEditDialog(
         title = { Text("Gérer les tags", style = MaterialTheme.typography.titleMedium) },
         text = {
             Column {
+                Text(
+                    "Tags actuellement attribués (${tags.size}) :",
+                    style = MaterialTheme.typography.labelSmall.copy(color = Amber),
+                )
+                Spacer(Modifier.height(6.dp))
+                if (tags.isEmpty()) {
+                    Text(
+                        "Aucun tag attribué pour l'instant.",
+                        style = MaterialTheme.typography.bodySmall.copy(color = TextSecondary),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                } else {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(bottom = 10.dp)
+                    ) {
+                        tags.forEach { tag ->
+                            InputChip(
+                                selected = true,
+                                onClick = { tags = tags - tag },
+                                label = { Text("#$tag") },
+                                trailingIcon = { Icon(Icons.Rounded.Close, "Supprimer", Modifier.size(16.dp)) },
+                                colors = InputChipDefaults.inputChipColors(
+                                    selectedContainerColor = AmberGlow,
+                                    selectedLabelColor = Amber,
+                                    selectedTrailingIconColor = Amber,
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = GlassBorder, modifier = Modifier.padding(vertical = 8.dp))
+
                 OutlinedTextField(
                     value = inputText,
                     onValueChange = { inputText = it },
-                    label = { Text("Nouveau tag") },
+                    label = { Text("Ajouter un tag") },
+                    placeholder = { Text("Tapez un mot-clé...") },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = Amber,
@@ -600,14 +638,15 @@ fun TagEditDialog(
                         }) {
                             Icon(Icons.Rounded.Add, "Ajouter", tint = Amber)
                         }
-                    }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
                 )
 
                 if (suggestions.isNotEmpty()) {
                     Spacer(Modifier.height(6.dp))
-                    Text("Suggestions :", style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary))
+                    Text("Suggestions d'autocomplétion :", style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary))
                     Spacer(Modifier.height(4.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(suggestions) { sug ->
                             FilterChip(
                                 selected = false,
@@ -615,26 +654,14 @@ fun TagEditDialog(
                                     if (!tags.contains(sug)) tags = tags + sug
                                     inputText = ""
                                 },
-                                label = { Text("#$sug") },
+                                label = { Text("💡 #$sug") },
                                 colors = FilterChipDefaults.filterChipColors(
                                     containerColor = AmberGlow,
                                     labelColor = Amber,
                                 ),
-                                shape = RoundedCornerShape(6.dp),
+                                shape = RoundedCornerShape(8.dp),
                             )
                         }
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    items(tags) { tag ->
-                        InputChip(
-                            selected = false,
-                            onClick = { tags = tags - tag },
-                            label = { Text("#$tag") },
-                            trailingIcon = { Icon(Icons.Rounded.Close, "Supprimer", Modifier.size(16.dp)) },
-                        )
                     }
                 }
             }

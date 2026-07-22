@@ -39,11 +39,8 @@ class BrowserViewModel(
     val rootDirectories = repo.getRootDirectories()
 
     init {
-        // Start at the VideoSaver download folder if it exists, otherwise root
-        val startDir = File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            "VideoSaver"
-        ).let { if (it.exists()) it else Environment.getExternalStorageDirectory() }
+        // Start at root storage directory (/storage/emulated/0) so all folders and favorites are displayed by default
+        val startDir = Environment.getExternalStorageDirectory()
         navigateTo(startDir)
     }
 

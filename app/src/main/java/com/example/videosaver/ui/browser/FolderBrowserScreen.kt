@@ -831,12 +831,14 @@ private fun MediaGridCard(
                 ) {
                     if (onEditTags != null && !inSelectionMode) {
                         Surface(
-                            color = Color.Black.copy(0.5f),
+                            onClick = onEditTags,
+                            color = Color.Black.copy(0.65f),
                             shape = CircleShape,
-                            modifier = Modifier.size(24.dp).clickable { onEditTags() }
+                            border = BorderStroke(1.dp, AmberGlow),
+                            modifier = Modifier.size(30.dp),
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Rounded.Tag, "Gérer les tags", tint = Amber, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Rounded.Tag, "Gérer les tags", tint = Amber, modifier = Modifier.size(16.dp))
                             }
                         }
                     }
