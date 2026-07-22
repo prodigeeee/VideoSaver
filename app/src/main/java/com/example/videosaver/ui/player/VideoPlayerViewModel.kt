@@ -82,6 +82,11 @@ class VideoPlayerViewModel(context: Context) : ViewModel() {
             }
             override fun onPlaybackStateChanged(playbackState: Int) {
                 _state.update { it.copy(isBuffering = playbackState == Player.STATE_BUFFERING) }
+                if (playbackState == Player.STATE_ENDED) {
+                    if (_state.value.loopMode == LoopMode.ALL) {
+                        playNext()
+                    }
+                }
             }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 val idx = player.currentMediaItemIndex
@@ -119,19 +124,26 @@ class VideoPlayerViewModel(context: Context) : ViewModel() {
 
     /** Load a playlist starting at [startIndex] */
     fun loadPlaylist(files: List<MediaFile>, startIndex: Int = 0) {
+        val safeIndex = startIndex.coerceIn(0, (files.size - 1).coerceAtLeast(0))
+        val currentMedia = files.getOrNull(safeIndex) ?: return
+
+        player.stop()
+        player.clearMediaItems()
         player.setSeekParameters(androidx.media3.exoplayer.SeekParameters.CLOSEST_SYNC)
-        // Uri.fromFile is more reliable than string "file://" for paths with special chars
-        val items = files.map { MediaItem.fromUri(android.net.Uri.fromFile(it.file)) }
-        player.setMediaItems(items, startIndex, 0L)
+
+        val mediaItem = MediaItem.fromUri(android.net.Uri.fromFile(currentMedia.file))
+        player.setMediaItem(mediaItem)
         player.prepare()
         player.playWhenReady = true
-        player.repeatMode = Player.REPEAT_MODE_ONE // Default: loop current video
+        player.repeatMode = if (_state.value.loopMode == LoopMode.ONE) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+
         _state.update { it.copy(
             playlist     = files,
             totalFiles   = files.size,
-            currentIndex = startIndex,
-            title        = files.getOrNull(startIndex)?.name ?: "",
-            loopMode     = LoopMode.ONE,
+            currentIndex = safeIndex,
+            title        = currentMedia.name,
+            hasError     = false,
+            errorMessage = null,
         )}
         showControls()
     }
@@ -159,8 +171,49 @@ class VideoPlayerViewModel(context: Context) : ViewModel() {
         showControls()
     }
 
-    fun playNext() { if (player.hasNextMediaItem()) player.seekToNextMediaItem(); showControls() }
-    fun playPrevious() { if (player.hasPreviousMediaItem()) player.seekToPreviousMediaItem(); showControls() }
+    fun playNext() {
+        val st = _state.value
+        if (st.playlist.isEmpty()) return
+        val nextIdx = if (st.currentIndex + 1 < st.playlist.size) st.currentIndex + 1 else 0
+        val nextMedia = st.playlist[nextIdx]
+
+        player.stop()
+        player.clearMediaItems()
+        player.setSeekParameters(androidx.media3.exoplayer.SeekParameters.CLOSEST_SYNC)
+        player.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(nextMedia.file)))
+        player.prepare()
+        player.playWhenReady = true
+
+        _state.update { it.copy(
+            currentIndex = nextIdx,
+            title        = nextMedia.name,
+            hasError     = false,
+            errorMessage = null,
+        )}
+        showControls()
+    }
+
+    fun playPrevious() {
+        val st = _state.value
+        if (st.playlist.isEmpty()) return
+        val prevIdx = if (st.currentIndex - 1 >= 0) st.currentIndex - 1 else st.playlist.size - 1
+        val prevMedia = st.playlist[prevIdx]
+
+        player.stop()
+        player.clearMediaItems()
+        player.setSeekParameters(androidx.media3.exoplayer.SeekParameters.CLOSEST_SYNC)
+        player.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(prevMedia.file)))
+        player.prepare()
+        player.playWhenReady = true
+
+        _state.update { it.copy(
+            currentIndex = prevIdx,
+            title        = prevMedia.name,
+            hasError     = false,
+            errorMessage = null,
+        )}
+        showControls()
+    }
 
     fun cycleLoopMode() {
         // ONE (default) → ALL → OFF → ONE
