@@ -22,6 +22,7 @@ data class BrowserUiState(
     val isFavorite: Boolean = false,
     val mediaInCurrentDir: List<MediaFile> = emptyList(),
     val folderPrefs: FolderPrefs = FolderPrefs(),
+    val scrollPositions: Map<String, Pair<Int, Int>> = emptyMap(),
 )
 
 class BrowserViewModel(
@@ -43,6 +44,13 @@ class BrowserViewModel(
             "VideoSaver"
         ).let { if (it.exists()) it else Environment.getExternalStorageDirectory() }
         navigateTo(startDir)
+    }
+
+    fun saveScrollPosition(path: String, index: Int, offset: Int) {
+        _state.update { st ->
+            val updatedMap = st.scrollPositions + (path to (index to offset))
+            st.copy(scrollPositions = updatedMap)
+        }
     }
 
     fun navigateTo(dir: File) {
@@ -104,9 +112,16 @@ class BrowserViewModel(
         return crumb.takeLast(4) // show max 4 levels
     }
 
-    fun updateFolderPrefs(columns: Int, sortBy: String, filter: String?) {
+    fun updateFolderPrefs(
+        columns: Int,
+        sortBy: String,
+        filter: String?,
+        sizeFilter: String? = null,
+        dimensionFilter: String? = null,
+        tagFilter: String? = null,
+    ) {
         val currentDir = _state.value.currentPath
-        val prefs = FolderPrefs(columns, sortBy, filter)
+        val prefs = FolderPrefs(columns, sortBy, filter, sizeFilter, dimensionFilter, tagFilter)
         repo.saveFolderPrefs(currentDir, prefs)
         _state.update { it.copy(folderPrefs = prefs) }
     }

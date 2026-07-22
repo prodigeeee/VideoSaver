@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
@@ -45,6 +46,8 @@ private enum class BrowserSort(val label: String) {
     DATE_ASC("Plus ancien"),
     SIZE_DESC("Plus grand"),
     SIZE_ASC("Plus petit"),
+    RES_DESC("Résolution ↓"),
+    RES_ASC("Résolution ↑"),
 }
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
@@ -60,16 +63,41 @@ fun FolderBrowserScreen(
     val favorites by vm.favorites.collectAsStateWithLifecycle()
 
     // Media view controls
-    var columns      by remember(state.folderPrefs) { mutableIntStateOf(state.folderPrefs.columns) }
-    var sortBy       by remember(state.folderPrefs) { mutableStateOf(
+    var columns         by remember(state.folderPrefs) { mutableIntStateOf(state.folderPrefs.columns) }
+    var sortBy          by remember(state.folderPrefs) { mutableStateOf(
         runCatching { BrowserSort.valueOf(state.folderPrefs.sortBy) }.getOrDefault(BrowserSort.NAME_ASC)
     ) }
-    var showSortMenu by remember { mutableStateOf(false) }
-    var mediaFilter  by remember(state.folderPrefs) { mutableStateOf(state.folderPrefs.mediaFilter) }
+    var showSortMenu    by remember { mutableStateOf(false) }
+    var mediaFilter     by remember(state.folderPrefs) { mutableStateOf<String?>(state.folderPrefs.mediaFilter) }
+    var sizeFilter      by remember(state.folderPrefs) { mutableStateOf<String?>(state.folderPrefs.sizeFilter) }
+    var dimensionFilter by remember(state.folderPrefs) { mutableStateOf<String?>(state.folderPrefs.dimensionFilter) }
+    var tagFilter       by remember(state.folderPrefs) { mutableStateOf<String?>(state.folderPrefs.tagFilter) }
 
     // Commit changes to VM when they change
-    LaunchedEffect(columns, sortBy, mediaFilter) {
-        vm.updateFolderPrefs(columns, sortBy.name, mediaFilter)
+    LaunchedEffect(columns, sortBy, mediaFilter, sizeFilter, dimensionFilter, tagFilter) {
+        vm.updateFolderPrefs(columns, sortBy.name, mediaFilter, sizeFilter, dimensionFilter, tagFilter)
+    }
+
+    // Scroll state persistence per path
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(state.currentPath) {
+        val pos = state.scrollPositions[state.currentPath.absolutePath]
+        if (pos != null) {
+            listState.scrollToItem(pos.first, pos.second)
+        } else {
+            listState.scrollToItem(0, 0)
+        }
+    }
+
+    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
+        if (!state.isLoading && state.entries.isNotEmpty()) {
+            vm.saveScrollPosition(
+                state.currentPath.absolutePath,
+                listState.firstVisibleItemIndex,
+                listState.firstVisibleItemScrollOffset
+            )
+        }
     }
 
     // Multi-selection
@@ -114,16 +142,36 @@ fun FolderBrowserScreen(
         }
     }
 
+    val availableTags = remember(state.mediaInCurrentDir) {
+        state.mediaInCurrentDir.flatMap { it.tags }.distinct().sorted()
+    }
+
     // Sorted + filtered media in current dir
-    val sortedMedia = remember(state.mediaInCurrentDir, sortBy, mediaFilter) {
+    val sortedMedia = remember(state.mediaInCurrentDir, sortBy, mediaFilter, sizeFilter, dimensionFilter, tagFilter) {
         state.mediaInCurrentDir
             .filter { f ->
-                when (mediaFilter) {
+                val mediaMatch = when (mediaFilter) {
                     "video" -> f.isVideo
                     "audio" -> f.isAudio
                     "image" -> f.isImage
                     else    -> true
                 }
+                val sizeMatch = when (sizeFilter) {
+                    "<100M"   -> f.sizeBytes < 100 * 1024 * 1024
+                    "100M-1G" -> f.sizeBytes in (100 * 1024 * 1024)..(1024 * 1024 * 1024)
+                    ">1G"     -> f.sizeBytes > 1024 * 1024 * 1024
+                    else      -> true
+                }
+                val dimMatch = when (dimensionFilter) {
+                    "PORTRAIT"  -> f.videoHeight > f.videoWidth && f.videoHeight > 0
+                    "LANDSCAPE" -> f.videoWidth >= f.videoHeight && f.videoWidth > 0
+                    "HD"        -> maxOf(f.videoWidth, f.videoHeight) >= 1280 || minOf(f.videoWidth, f.videoHeight) >= 720
+                    "4K"        -> maxOf(f.videoWidth, f.videoHeight) >= 3840 || minOf(f.videoWidth, f.videoHeight) >= 2160
+                    else        -> true
+                }
+                val tagMatch = tagFilter == null || f.tags.contains(tagFilter)
+
+                mediaMatch && sizeMatch && dimMatch && tagMatch
             }
             .let { list ->
                 when (sortBy) {
@@ -133,6 +181,8 @@ fun FolderBrowserScreen(
                     BrowserSort.DATE_ASC  -> list.sortedBy { it.lastModified }
                     BrowserSort.SIZE_DESC -> list.sortedByDescending { it.sizeBytes }
                     BrowserSort.SIZE_ASC  -> list.sortedBy { it.sizeBytes }
+                    BrowserSort.RES_DESC  -> list.sortedByDescending { it.videoWidth * it.videoHeight }
+                    BrowserSort.RES_ASC   -> list.sortedBy { it.videoWidth * it.videoHeight }
                 }
             }
     }
@@ -304,6 +354,7 @@ fun FolderBrowserScreen(
             // ── Panneau droit : grille média ─────────────────────────────────
             Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 LazyColumn(
+                    state = listState,
                     contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 80.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -311,68 +362,124 @@ fun FolderBrowserScreen(
                     if (state.mediaInCurrentDir.isNotEmpty()) {
                         stickyHeader {
                             Surface(color = Background.copy(alpha = 0.95f), modifier = Modifier.fillMaxWidth()) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                ) {
-                                    listOf(null to "Tous", "video" to "Vidéos", "image" to "Imgs", "audio" to "♪").forEach { (key, lbl) ->
-                                        FilterChip(
-                                            selected = mediaFilter == key,
-                                            onClick = { mediaFilter = key },
-                                            label = { Text(lbl, style = MaterialTheme.typography.labelSmall) },
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = AmberGlow,
-                                                selectedLabelColor     = Amber,
-                                                containerColor         = GlassWhite,
-                                                labelColor             = TextSecondary,
-                                            ),
-                                            shape = RoundedCornerShape(6.dp),
-                                        )
-                                    }
-                                    Text(
-                                        "${sortedMedia.size}",
-                                        style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary),
-                                        modifier = Modifier.weight(1f).padding(start = 4.dp),
-                                    )
-                                    // Grille
-                                    Icon(Icons.Rounded.GridView, null, tint = TextSecondary,
-                                        modifier = Modifier.size(12.dp))
-                                    Slider(
-                                        value         = (5 - columns).toFloat(),
-                                        onValueChange = { columns = (5 - it.toInt()).coerceIn(1, 4) },
-                                        valueRange    = 1f..4f,
-                                        steps         = 2,
-                                        colors        = SliderDefaults.colors(
-                                            thumbColor         = Amber,
-                                            activeTrackColor   = Amber,
-                                            inactiveTrackColor = AmberDim.copy(0.3f),
-                                        ),
-                                        modifier = Modifier.width(72.dp),
-                                    )
-                                    Surface(color = AmberGlow, shape = RoundedCornerShape(5.dp)) {
-                                        Text("${columns}×",
-                                            style = MaterialTheme.typography.labelSmall.copy(color = Amber),
-                                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
-                                    }
-                                    // Tri
-                                    Box {
-                                        IconButton(onClick = { showSortMenu = true }, modifier = Modifier.size(28.dp)) {
-                                            Icon(Icons.Rounded.SwapVert, "Trier", tint = Amber, modifier = Modifier.size(16.dp))
+                                Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                    LazyRow(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        // Types
+                                        items(listOf(null to "Tous", "video" to "Vidéos", "image" to "Imgs", "audio" to "♪")) { (key, lbl) ->
+                                            FilterChip(
+                                                selected = mediaFilter == key,
+                                                onClick = { mediaFilter = key },
+                                                label = { Text(lbl, style = MaterialTheme.typography.labelSmall) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = AmberGlow,
+                                                    selectedLabelColor     = Amber,
+                                                    containerColor         = GlassWhite,
+                                                    labelColor             = TextSecondary,
+                                                ),
+                                                shape = RoundedCornerShape(6.dp),
+                                            )
                                         }
-                                        DropdownMenu(
-                                            expanded = showSortMenu,
-                                            onDismissRequest = { showSortMenu = false },
-                                            containerColor = SurfaceMid,
-                                        ) {
-                                            BrowserSort.entries.forEach { s ->
-                                                DropdownMenuItem(
-                                                    text = { Text(s.label, color = if (sortBy == s) Amber else TextPrimary) },
-                                                    trailingIcon = {
-                                                        if (sortBy == s) Icon(Icons.Rounded.Check, null, tint = Amber, modifier = Modifier.size(16.dp))
-                                                    },
-                                                    onClick = { sortBy = s; showSortMenu = false },
-                                                )
+
+                                        // Size
+                                        items(listOf("<100M" to "<100M", "100M-1G" to "100M-1G", ">1G" to ">1G")) { (key, lbl) ->
+                                            FilterChip(
+                                                selected = sizeFilter == key,
+                                                onClick = { sizeFilter = if (sizeFilter == key) null else key },
+                                                label = { Text(lbl, style = MaterialTheme.typography.labelSmall) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = AmberGlow,
+                                                    selectedLabelColor     = Amber,
+                                                    containerColor         = GlassWhite,
+                                                    labelColor             = TextSecondary,
+                                                ),
+                                                shape = RoundedCornerShape(6.dp),
+                                            )
+                                        }
+
+                                        // Dimension / Orientation
+                                        items(listOf("PORTRAIT" to "📱", "LANDSCAPE" to "🖼️", "HD" to "HD", "4K" to "4K")) { (key, lbl) ->
+                                            FilterChip(
+                                                selected = dimensionFilter == key,
+                                                onClick = { dimensionFilter = if (dimensionFilter == key) null else key },
+                                                label = { Text(lbl, style = MaterialTheme.typography.labelSmall) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = AmberGlow,
+                                                    selectedLabelColor     = Amber,
+                                                    containerColor         = GlassWhite,
+                                                    labelColor             = TextSecondary,
+                                                ),
+                                                shape = RoundedCornerShape(6.dp),
+                                            )
+                                        }
+
+                                        // Tags
+                                        items(availableTags) { tag ->
+                                            FilterChip(
+                                                selected = tagFilter == tag,
+                                                onClick = { tagFilter = if (tagFilter == tag) null else tag },
+                                                label = { Text("#$tag", style = MaterialTheme.typography.labelSmall) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = AmberGlow,
+                                                    selectedLabelColor     = Amber,
+                                                    containerColor         = GlassWhite,
+                                                    labelColor             = TextSecondary,
+                                                ),
+                                                shape = RoundedCornerShape(6.dp),
+                                            )
+                                        }
+                                    }
+
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        Text(
+                                            "${sortedMedia.size} média(s)",
+                                            style = MaterialTheme.typography.labelSmall.copy(color = TextSecondary),
+                                            modifier = Modifier.weight(1f).padding(start = 4.dp),
+                                        )
+                                        // Grille
+                                        Icon(Icons.Rounded.GridView, null, tint = TextSecondary,
+                                            modifier = Modifier.size(12.dp))
+                                        Slider(
+                                            value         = (5 - columns).toFloat(),
+                                            onValueChange = { columns = (5 - it.toInt()).coerceIn(1, 4) },
+                                            valueRange    = 1f..4f,
+                                            steps         = 2,
+                                            colors        = SliderDefaults.colors(
+                                                thumbColor         = Amber,
+                                                activeTrackColor   = Amber,
+                                                inactiveTrackColor = AmberDim.copy(0.3f),
+                                            ),
+                                            modifier = Modifier.width(72.dp),
+                                        )
+                                        Surface(color = AmberGlow, shape = RoundedCornerShape(5.dp)) {
+                                            Text("${columns}×",
+                                                style = MaterialTheme.typography.labelSmall.copy(color = Amber),
+                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
+                                        }
+                                        // Tri
+                                        Box {
+                                            IconButton(onClick = { showSortMenu = true }, modifier = Modifier.size(28.dp)) {
+                                                Icon(Icons.Rounded.SwapVert, "Trier", tint = Amber, modifier = Modifier.size(16.dp))
+                                            }
+                                            DropdownMenu(
+                                                expanded = showSortMenu,
+                                                onDismissRequest = { showSortMenu = false },
+                                                containerColor = SurfaceMid,
+                                            ) {
+                                                BrowserSort.entries.forEach { s ->
+                                                    DropdownMenuItem(
+                                                        text = { Text(s.label, color = if (sortBy == s) Amber else TextPrimary) },
+                                                        trailingIcon = {
+                                                            if (sortBy == s) Icon(Icons.Rounded.Check, null, tint = Amber, modifier = Modifier.size(16.dp))
+                                                        },
+                                                        onClick = { sortBy = s; showSortMenu = false },
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -473,7 +580,7 @@ fun FolderBrowserScreen(
 
     } else {
         // ════════════════════════════════════════════════════════════════════
-        // PORTRAIT : layout existant inchangé
+        // PORTRAIT : layout existant avec listState et filtres étendus
         // ════════════════════════════════════════════════════════════════════
         Box(modifier = modifier.fillMaxSize().background(Background)) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -539,6 +646,7 @@ fun FolderBrowserScreen(
                 }
 
                 LazyColumn(
+                    state = listState,
                     contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 120.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
@@ -605,16 +713,61 @@ fun FolderBrowserScreen(
                             Surface(color = Background.copy(alpha = 0.95f), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                                 Column {
                                     Spacer(Modifier.height(12.dp))
-                                    // Toolbar: filter chips
-                                    Row(
+                                    // Toolbar: filter chips (Type + Size + Dimensions + Tags)
+                                    LazyRow(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     ) {
-                                        listOf(null to "Tous", "video" to "Vidéos", "image" to "Images", "audio" to "Audio").forEach { (key, lbl) ->
+                                        items(listOf(null to "Tous", "video" to "Vidéos", "image" to "Images", "audio" to "Audio")) { (key, lbl) ->
                                             FilterChip(
                                                 selected = mediaFilter == key,
                                                 onClick  = { mediaFilter = key },
                                                 label    = { Text(lbl) },
+                                                colors   = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor   = AmberGlow,
+                                                    selectedLabelColor       = Amber,
+                                                    containerColor           = GlassWhite,
+                                                    labelColor               = TextSecondary,
+                                                ),
+                                                shape = RoundedCornerShape(8.dp),
+                                            )
+                                        }
+
+                                        items(listOf("<100M" to "< 100 Mo", "100M-1G" to "100Mo-1Go", ">1G" to "> 1 Go")) { (key, lbl) ->
+                                            FilterChip(
+                                                selected = sizeFilter == key,
+                                                onClick  = { sizeFilter = if (sizeFilter == key) null else key },
+                                                label    = { Text(lbl) },
+                                                colors   = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor   = AmberGlow,
+                                                    selectedLabelColor       = Amber,
+                                                    containerColor           = GlassWhite,
+                                                    labelColor               = TextSecondary,
+                                                ),
+                                                shape = RoundedCornerShape(8.dp),
+                                            )
+                                        }
+
+                                        items(listOf("PORTRAIT" to "📱 Portrait", "LANDSCAPE" to "🖼️ Paysage", "HD" to "HD 720p+", "4K" to "4K 2160p")) { (key, lbl) ->
+                                            FilterChip(
+                                                selected = dimensionFilter == key,
+                                                onClick  = { dimensionFilter = if (dimensionFilter == key) null else key },
+                                                label    = { Text(lbl) },
+                                                colors   = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor   = AmberGlow,
+                                                    selectedLabelColor       = Amber,
+                                                    containerColor           = GlassWhite,
+                                                    labelColor               = TextSecondary,
+                                                ),
+                                                shape = RoundedCornerShape(8.dp),
+                                            )
+                                        }
+
+                                        items(availableTags) { tag ->
+                                            FilterChip(
+                                                selected = tagFilter == tag,
+                                                onClick  = { tagFilter = if (tagFilter == tag) null else tag },
+                                                label    = { Text("#$tag") },
                                                 colors   = FilterChipDefaults.filterChipColors(
                                                     selectedContainerColor   = AmberGlow,
                                                     selectedLabelColor       = Amber,
@@ -828,7 +981,29 @@ private fun MediaGridCard(
                     modifier = Modifier.size(if (columns == 1) 40.dp else 28.dp),
                 )
 
-                // Format badge
+                // Resolution badge (top-start)
+                if (media.isVideo && media.videoWidth > 0 && media.videoHeight > 0) {
+                    val resStr = when {
+                        maxOf(media.videoWidth, media.videoHeight) >= 3840 || minOf(media.videoWidth, media.videoHeight) >= 2160 -> "4K"
+                        maxOf(media.videoWidth, media.videoHeight) >= 2560 || minOf(media.videoWidth, media.videoHeight) >= 1440 -> "1440p"
+                        maxOf(media.videoWidth, media.videoHeight) >= 1920 || minOf(media.videoWidth, media.videoHeight) >= 1080 -> "1080p"
+                        maxOf(media.videoWidth, media.videoHeight) >= 1280 || minOf(media.videoWidth, media.videoHeight) >= 720  -> "720p"
+                        else -> "${minOf(media.videoWidth, media.videoHeight)}p"
+                    }
+                    Surface(
+                        color  = Color.Black.copy(0.6f),
+                        shape  = RoundedCornerShape(5.dp),
+                        modifier = Modifier.align(Alignment.TopStart).padding(5.dp),
+                    ) {
+                        Text(
+                            resStr,
+                            style = MaterialTheme.typography.labelSmall.copy(color = Color.White),
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                        )
+                    }
+                }
+
+                // Format badge (top-end)
                 Surface(
                     color  = accentColor.copy(0.2f),
                     shape  = RoundedCornerShape(5.dp),
@@ -857,11 +1032,22 @@ private fun MediaGridCard(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
-                            if (media.sizeBytes > 0) {
-                                Text(
-                                    formatFileSize(media.sizeBytes),
-                                    style = MaterialTheme.typography.labelSmall.copy(color = Color.White.copy(0.6f)),
-                                )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (media.sizeBytes > 0) {
+                                    Text(
+                                        formatFileSize(media.sizeBytes),
+                                        style = MaterialTheme.typography.labelSmall.copy(color = Color.White.copy(0.6f)),
+                                    )
+                                }
+                                if (media.tags.isNotEmpty()) {
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        media.tags.take(2).joinToString(" ") { "#$it" },
+                                        style = MaterialTheme.typography.labelSmall.copy(color = Amber, fontSize = 9.sp),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                             }
                         }
                     }

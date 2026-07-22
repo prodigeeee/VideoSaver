@@ -17,12 +17,18 @@ data class MediaFile(
     val isAudio: Boolean,
     val isImage: Boolean,
     val extension: String,
+    val videoWidth: Int = 0,
+    val videoHeight: Int = 0,
+    val tags: List<String> = emptyList(),
 )
 
 data class FolderPrefs(
     val columns: Int = 2,
     val sortBy: String = "NAME_ASC",
-    val mediaFilter: String? = null
+    val mediaFilter: String? = null,
+    val sizeFilter: String? = null,
+    val dimensionFilter: String? = null,
+    val tagFilter: String? = null,
 )
 
 /** A directory entry shown in the browser */
@@ -41,6 +47,7 @@ data class BrowserEntry(
 class BrowserRepository(
     private val context: Context,
     private val folderDao: FolderDao = AppDatabase.getInstance(context).folderDao(),
+    private val downloadDao: DownloadDao = AppDatabase.getInstance(context).downloadDao(),
 ) {
     private val prefs = context.getSharedPreferences("videosaver_prefs", Context.MODE_PRIVATE)
     private fun showHiddenFiles(): Boolean = prefs.getBoolean("show_hidden_files", false)
@@ -69,15 +76,18 @@ class BrowserRepository(
         val str = prefs.getString("pref_$path", null) ?: return FolderPrefs()
         val parts = str.split("|")
         return FolderPrefs(
-            columns = parts.getOrNull(0)?.toIntOrNull() ?: 2,
-            sortBy = parts.getOrNull(1) ?: "NAME_ASC",
-            mediaFilter = parts.getOrNull(2).takeIf { it != "null" }
+            columns         = parts.getOrNull(0)?.toIntOrNull() ?: 2,
+            sortBy          = parts.getOrNull(1) ?: "NAME_ASC",
+            mediaFilter     = parts.getOrNull(2).takeIf { it != "null" },
+            sizeFilter      = parts.getOrNull(3).takeIf { it != "null" },
+            dimensionFilter = parts.getOrNull(4).takeIf { it != "null" },
+            tagFilter       = parts.getOrNull(5).takeIf { it != "null" },
         )
     }
 
     fun saveFolderPrefs(dir: File, prefsObj: FolderPrefs) {
         val path = dir.absolutePath
-        val str = "${prefsObj.columns}|${prefsObj.sortBy}|${prefsObj.mediaFilter ?: "null"}"
+        val str = "${prefsObj.columns}|${prefsObj.sortBy}|${prefsObj.mediaFilter ?: "null"}|${prefsObj.sizeFilter ?: "null"}|${prefsObj.dimensionFilter ?: "null"}|${prefsObj.tagFilter ?: "null"}"
         prefs.edit().putString("pref_$path", str).apply()
     }
 
@@ -170,18 +180,42 @@ class BrowserRepository(
     suspend fun scanMediaFiles(dir: File): List<MediaFile> = withContext(Dispatchers.IO) {
         val showHidden = showHiddenFiles()
         val results = mutableListOf<MediaFile>()
-        
+
+        val tagsMap = try {
+            downloadDao.getCompletedDownloadsList().associate { it.filePath to it.tags }
+        } catch (e: Exception) {
+            emptyMap()
+        }
+
         dir.listFiles()?.forEach { f ->
             when {
                 !f.isDirectory && (showHidden || !f.name.startsWith(".")) -> {
-                    if (isVideoFile(f)) results.add(toMediaFile(f, isVideo = true))
-                    else if (isAudioFile(f)) results.add(toMediaFile(f, isAudio = true))
-                    else if (isImageFile(f)) results.add(toMediaFile(f, isImage = true))
+                    val tags = tagsMap[f.absolutePath] ?: emptyList()
+                    if (isVideoFile(f)) {
+                        val (w, h) = getVideoDimensions(f)
+                        results.add(toMediaFile(f, isVideo = true, width = w, height = h, tags = tags))
+                    }
+                    else if (isAudioFile(f)) results.add(toMediaFile(f, isAudio = true, tags = tags))
+                    else if (isImageFile(f)) results.add(toMediaFile(f, isImage = true, tags = tags))
                 }
             }
         }
         
         results.sortedByDescending { it.lastModified }
+    }
+
+    private fun getVideoDimensions(f: File): Pair<Int, Int> {
+        return try {
+            val retriever = android.media.MediaMetadataRetriever()
+            retriever.setDataSource(f.absolutePath)
+            val w = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+            val h = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+            val rot = retriever.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            retriever.release()
+            if (rot == 90 || rot == 270) Pair(h, w) else Pair(w, h)
+        } catch (e: Exception) {
+            Pair(0, 0)
+        }
     }
 
     /** Returns the quick-access root directories the user cares about */
@@ -223,7 +257,15 @@ class BrowserRepository(
     private fun isImageFile(f: File) = f.extension.lowercase() in imageExts
     private fun isMediaFile(f: File) = isMediaFileName(f.name)
 
-    private fun toMediaFile(f: File, isVideo: Boolean = false, isAudio: Boolean = false, isImage: Boolean = false) = MediaFile(
+    private fun toMediaFile(
+        f: File,
+        isVideo: Boolean = false,
+        isAudio: Boolean = false,
+        isImage: Boolean = false,
+        width: Int = 0,
+        height: Int = 0,
+        tags: List<String> = emptyList(),
+    ) = MediaFile(
         file         = f,
         name         = f.name,
         sizeBytes    = f.length(),
@@ -232,6 +274,9 @@ class BrowserRepository(
         isAudio      = isAudio,
         isImage      = isImage,
         extension    = f.extension.lowercase(),
+        videoWidth   = width,
+        videoHeight  = height,
+        tags         = tags,
     )
 
     private fun friendlyName(f: File): String = when (f.name) {

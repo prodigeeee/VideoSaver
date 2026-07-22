@@ -21,6 +21,9 @@ interface DownloadDao {
     @Query("SELECT * FROM downloads WHERE status = 'COMPLETED' ORDER BY completedAt DESC")
     fun getCompletedDownloads(): Flow<List<DownloadEntity>>
 
+    @Query("SELECT * FROM downloads WHERE status = 'COMPLETED'")
+    suspend fun getCompletedDownloadsList(): List<DownloadEntity>
+
     @Query("SELECT * FROM downloads WHERE status IN ('PENDING', 'FETCHING_INFO', 'DOWNLOADING') ORDER BY createdAt ASC")
     fun getActiveDownloads(): Flow<List<DownloadEntity>>
 
