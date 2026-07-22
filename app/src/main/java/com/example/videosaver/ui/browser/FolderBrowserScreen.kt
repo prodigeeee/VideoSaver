@@ -851,8 +851,15 @@ private fun MediaGridCard(
         ) {
             Box(contentAlignment = Alignment.Center) {
                 if (media.isVideo || media.isImage) {
+                    val context = LocalContext.current
+                    val req = remember(media.file) {
+                        coil3.request.ImageRequest.Builder(context)
+                            .data(media.file)
+                            .size(300, 300)
+                            .build()
+                    }
                     AsyncImage(
-                        model = media.file,
+                        model = req,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()

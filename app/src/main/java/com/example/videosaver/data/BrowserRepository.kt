@@ -214,9 +214,13 @@ class BrowserRepository(
             val map = mutableMapOf<String, List<String>>()
             downloadDao.getCompletedDownloadsList().forEach {
                 map[it.filePath] = it.tags
+                val can = try { File(it.filePath).canonicalPath } catch (_: Exception) { null }
+                if (can != null) map[can] = it.tags
             }
             fileTagDao.getAllFileTags().forEach {
                 map[it.filePath] = it.tags
+                val can = try { File(it.filePath).canonicalPath } catch (_: Exception) { null }
+                if (can != null) map[can] = it.tags
             }
             map
         } catch (e: Exception) {
@@ -228,7 +232,8 @@ class BrowserRepository(
 
         for (f in allFiles) {
             if (!f.isDirectory && (showHidden || !f.name.startsWith(".")) && !f.name.endsWith(".xmp")) {
-                var tags = tagsMap[f.absolutePath] ?: emptyList()
+                val canPath = try { f.canonicalPath } catch (_: Exception) { f.absolutePath }
+                var tags = tagsMap[f.absolutePath] ?: tagsMap[canPath] ?: emptyList()
                 if (tags.isEmpty()) {
                     tags = readPhysicalFileTags(f, xmpNames)
                 }
