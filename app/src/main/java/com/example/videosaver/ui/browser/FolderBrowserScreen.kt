@@ -36,6 +36,8 @@ import com.example.videosaver.data.FolderEntity
 import com.example.videosaver.data.MediaFile
 import com.example.videosaver.theme.*
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 // ─── Sort options for the browser media view ──────────────────────────────────
 
@@ -851,19 +853,20 @@ private fun MediaGridCard(
         ) {
             Box(contentAlignment = Alignment.Center) {
                 if (media.isVideo || media.isImage) {
-                    val context = LocalContext.current
-                    val req = remember(media.file) {
-                        coil3.request.ImageRequest.Builder(context)
-                            .data(media.file)
-                            .size(300, 300)
-                            .build()
+                    if (media.isVideo) {
+                        // CPU-only thumbnail via MediaMetadataRetriever — NO hardware decoder used
+                        VideoThumbnail(
+                            file = media.file,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        AsyncImage(
+                            model = media.file,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
                     }
-                    AsyncImage(
-                        model = req,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
                     // Bottom gradient for text readability
                     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.6f)))))
                 }
