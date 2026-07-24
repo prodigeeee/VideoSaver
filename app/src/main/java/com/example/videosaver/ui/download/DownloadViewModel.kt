@@ -4,9 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.example.videosaver.data.BrowserRepository
 import com.example.videosaver.data.DownloadRepository
-import com.example.videosaver.data.FolderEntity
 import com.example.videosaver.data.VideoFormat
 import com.example.videosaver.data.VideoInfo
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,7 +32,6 @@ data class DownloadProgress(
 
 class DownloadViewModel(
     private val repository: DownloadRepository,
-    private val browserRepository: BrowserRepository,
 ) : ViewModel() {
 
     val urlInput = MutableStateFlow("")
@@ -46,7 +43,6 @@ class DownloadViewModel(
     val progressMap = MutableStateFlow<Map<Long, DownloadProgress>>(emptyMap())
 
     val downloads = repository.allDownloads
-    val favorites = browserRepository.favorites
 
     fun onUrlChanged(url: String) {
         urlInput.value = url
@@ -153,8 +149,8 @@ class DownloadViewModel(
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             val db = com.example.videosaver.data.AppDatabase.getInstance(context)
             val repo = DownloadRepository(context, db.downloadDao())
-            val browserRepo = BrowserRepository(context)
-            return DownloadViewModel(repo, browserRepo) as T
+            return DownloadViewModel(repo) as T
         }
     }
 }
+

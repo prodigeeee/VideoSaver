@@ -62,11 +62,9 @@ enum class MediaFilter(val label: String, val icon: ImageVector) {
 fun LibraryScreen(
     modifier: Modifier = Modifier,
     vm: DownloadViewModel = viewModel(factory = DownloadViewModel.Factory(LocalContext.current)),
-    onPlayAudio: (List<com.example.videosaver.data.MediaFile>, Int) -> Unit = { _, _ -> }
 ) {
     val downloads by vm.downloads.collectAsStateWithLifecycle(emptyList())
     val completed = downloads.filter { it.status == DownloadStatus.COMPLETED }
-    val favorites by vm.favorites.collectAsStateWithLifecycle(emptyList())
     val context = LocalContext.current
 
     // Local UI state for controls
@@ -314,24 +312,7 @@ fun LibraryScreen(
                             onDelete = { vm.deleteDownload(dl.id) },
                             onUpdateTags = { tags -> vm.updateTags(dl.id, tags) },
                             onMove = { moveTargetDownload = dl },
-                            onPlay = { 
-                                if (dl.isAudioOnly) {
-                                    val f = File(dl.filePath)
-                                    val media = com.example.videosaver.data.MediaFile(
-                                        file = f,
-                                        name = dl.title,
-                                        sizeBytes = dl.fileSize,
-                                        lastModified = dl.completedAt ?: dl.createdAt,
-                                        isVideo = false,
-                                        isAudio = true,
-                                        isImage = false,
-                                        extension = f.extension
-                                    )
-                                    onPlayAudio(listOf(media), 0)
-                                } else {
-                                    openFile(context, dl)
-                                }
-                            }
+                            onPlay = { openFile(context, dl) }
                         )
                     }
                 }

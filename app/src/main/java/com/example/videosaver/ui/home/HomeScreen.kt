@@ -40,7 +40,6 @@ fun HomeScreen(
     val showFormatPicker by vm.showFormatPicker.collectAsStateWithLifecycle()
     val downloads by vm.downloads.collectAsStateWithLifecycle(emptyList())
     val progressMap by vm.progressMap.collectAsStateWithLifecycle()
-    val favorites by vm.favorites.collectAsStateWithLifecycle(emptyList())
     
     var moveTargetDownload by remember { mutableStateOf<com.example.videosaver.data.DownloadEntity?>(null) }
 
@@ -205,7 +204,6 @@ fun HomeScreen(
     // ── Move File Sheet ───────────────────────────────────────────────────────
     if (moveTargetDownload != null) {
         MoveFileSheet(
-            favorites = favorites,
             onSelectFolder = { folder ->
                 vm.moveDownload(moveTargetDownload!!.id, folder)
                 moveTargetDownload = null

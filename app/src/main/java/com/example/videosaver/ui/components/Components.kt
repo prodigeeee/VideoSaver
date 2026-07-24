@@ -347,110 +347,21 @@ private fun formatSpeed(bps: Long): String = when {
 
 // ─── Move File Bottom Sheet ──────────────────────────────────────────────────
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MoveFileSheet(
-    favorites: List<com.example.videosaver.data.FolderEntity>,
     onSelectFolder: (java.io.File) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var showFolderPicker by remember { mutableStateOf(false) }
-    var pickerStartDir by remember { mutableStateOf(Environment.getExternalStorageDirectory()) }
+    FolderPickerDialog(
+        initialDir = Environment.getExternalStorageDirectory(),
+        onFolderPicked = {
+            onSelectFolder(it)
+        },
+        onDismiss = onDismiss
+    )
+}
 
-    if (showFolderPicker) {
-        FolderPickerDialog(
-            initialDir = pickerStartDir,
-            onFolderPicked = {
-                onSelectFolder(it)
-                showFolderPicker = false
-            },
-            onDismiss = { showFolderPicker = false }
-        )
-        return
-    }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = SurfaceDark,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(24.dp),
-        ) {
-            Text("Déplacer vers...", style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(4.dp))
-            Text("Choisissez un dossier favori pour déplacer ce fichier", style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.height(20.dp))
-
-            if (favorites.isEmpty()) {
-                Text(
-                    "Aucun dossier favori.\nAllez dans l'explorateur de fichiers pour en ajouter.",
-                    style = MaterialTheme.typography.bodyMedium.copy(color = TextDisabled),
-                    modifier = Modifier.padding(vertical = 16.dp)
-                )
-            } else {
-                androidx.compose.foundation.lazy.LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 300.dp)
-                ) {
-                    items(favorites.size) { i ->
-                        val fav = favorites[i]
-                        Surface(
-                            onClick = {
-                                pickerStartDir = java.io.File(fav.path)
-                                showFolderPicker = true
-                            },
-                            color = GlassWhite,
-                            shape = RoundedCornerShape(14.dp),
-                            border = BorderStroke(1.dp, GlassBorder),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(Icons.Rounded.Folder, null, tint = Amber, modifier = Modifier.size(22.dp))
-                                Spacer(Modifier.width(14.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(fav.displayName, style = MaterialTheme.typography.bodyLarge.copy(color = TextPrimary))
-                                    Text(
-                                        fav.path.split("/").takeLast(2).joinToString("/"),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
-            Surface(
-                onClick = {
-                    pickerStartDir = Environment.getExternalStorageDirectory()
-                    showFolderPicker = true
-                },
-                color = GlassWhite,
-                shape = RoundedCornerShape(14.dp),
-                border = BorderStroke(1.dp, GlassBorder),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Rounded.FolderOpen, null, tint = TextPrimary, modifier = Modifier.size(22.dp))
-                    Spacer(Modifier.width(14.dp))
-                    Text("Autre dossier...", style = MaterialTheme.typography.bodyLarge.copy(color = TextPrimary))
-                }
-            }
-        }
-    }
 }
 
 @Composable
