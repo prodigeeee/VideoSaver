@@ -40,8 +40,6 @@ fun HomeScreen(
     val showFormatPicker by vm.showFormatPicker.collectAsStateWithLifecycle()
     val downloads by vm.downloads.collectAsStateWithLifecycle(emptyList())
     val progressMap by vm.progressMap.collectAsStateWithLifecycle()
-    
-    var moveTargetDownload by remember { mutableStateOf<com.example.videosaver.data.DownloadEntity?>(null) }
 
     // Notification permission (Android 13+)
     val notifLauncher = rememberLauncherForActivityResult(
@@ -161,7 +159,6 @@ fun HomeScreen(
                         progress = progressMap[dl.id],
                         onCancel = { vm.cancelDownload(dl.id) },
                         onDelete = { vm.deleteDownload(dl.id, deleteFile = false) },
-                        onMove   = { moveTargetDownload = dl },
                     )
                 }
             }
@@ -176,7 +173,6 @@ fun HomeScreen(
                         progress = null,
                         onCancel = { vm.cancelDownload(dl.id) },
                         onDelete = { vm.deleteDownload(dl.id, deleteFile = false) },
-                        onMove   = { moveTargetDownload = dl },
                     )
                 }
             }
@@ -198,17 +194,6 @@ fun HomeScreen(
             onConfirm = { fmt, audioOnly, audioFmt ->
                 vm.startDownload(fmt, audioOnly, audioFmt)
             },
-        )
-    }
-
-    // ── Move File Sheet ───────────────────────────────────────────────────────
-    if (moveTargetDownload != null) {
-        MoveFileSheet(
-            onSelectFolder = { folder ->
-                vm.moveDownload(moveTargetDownload!!.id, folder)
-                moveTargetDownload = null
-            },
-            onDismiss = { moveTargetDownload = null }
         )
     }
 }

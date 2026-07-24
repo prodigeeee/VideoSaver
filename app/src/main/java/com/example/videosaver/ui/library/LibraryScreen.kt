@@ -74,8 +74,6 @@ fun LibraryScreen(
     var showSortMenu by remember { mutableStateOf(false) }
     var showControls by remember { mutableStateOf(true) }
     var selectedTag  by remember { mutableStateOf<String?>(null) }
-    var moveTargetDownload by remember { mutableStateOf<com.example.videosaver.data.DownloadEntity?>(null) }
-    var moveMultiple by remember { mutableStateOf(false) }
     var selectedIds by remember { mutableStateOf(setOf<Long>()) }
     val inSelectionMode = selectedIds.isNotEmpty()
 
@@ -133,9 +131,6 @@ fun LibraryScreen(
                                     Icon(Icons.Rounded.Close, "Annuler", tint = TextPrimary)
                                 }
                                 Text("${selectedIds.size} sélectionné(s)", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                                IconButton(onClick = { moveMultiple = true }) {
-                                    Icon(Icons.Rounded.DriveFileMove, "Déplacer", tint = Amber)
-                                }
                                 IconButton(onClick = { vm.deleteDownloads(selectedIds); selectedIds = emptySet() }) {
                                     Icon(Icons.Rounded.Delete, "Supprimer", tint = ErrorRed)
                                 }
@@ -311,37 +306,13 @@ fun LibraryScreen(
                             },
                             onDelete = { vm.deleteDownload(dl.id) },
                             onUpdateTags = { tags -> vm.updateTags(dl.id, tags) },
-                            onMove = { moveTargetDownload = dl },
+                            onMove = {},
                             onPlay = { openFile(context, dl) }
                         )
                     }
                 }
             }
         }
-    }
-
-    // ── Move File Sheet ───────────────────────────────────────────────────────
-    if (moveTargetDownload != null) {
-        com.example.videosaver.ui.components.MoveFileSheet(
-            favorites = favorites,
-            onSelectFolder = { folder ->
-                vm.moveDownload(moveTargetDownload!!.id, folder)
-                moveTargetDownload = null
-            },
-            onDismiss = { moveTargetDownload = null }
-        )
-    }
-
-    if (moveMultiple) {
-        com.example.videosaver.ui.components.MoveFileSheet(
-            favorites = favorites,
-            onSelectFolder = { folder ->
-                vm.moveDownloads(selectedIds, folder)
-                selectedIds = emptySet()
-                moveMultiple = false
-            },
-            onDismiss = { moveMultiple = false }
-        )
     }
 }
 
