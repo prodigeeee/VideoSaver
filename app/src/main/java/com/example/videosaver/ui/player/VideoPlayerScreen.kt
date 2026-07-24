@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -75,6 +76,13 @@ fun VideoPlayerScreen(
     var zoomScale by remember { mutableFloatStateOf(1f) }
     var offsetX   by remember { mutableFloatStateOf(0f) }
     var offsetY   by remember { mutableFloatStateOf(0f) }
+
+    // ── Keep screen on during playback ──────────────────────────────────────
+    val view = LocalView.current
+    DisposableEffect(view) {
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false }
+    }
 
     DisposableEffect(Unit) {
         onDispose { vm.player.pause() }

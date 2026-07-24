@@ -66,6 +66,7 @@ class VideoPlayerViewModel(context: Context) : ViewModel() {
         .setMediaSourceFactory(androidx.media3.exoplayer.source.DefaultMediaSourceFactory(context, extractorsFactory))
         .setLoadControl(loadControl)
         .setHandleAudioBecomingNoisy(true)
+        .experimentalSetDynamicSchedulingEnabled(true)
         .build()
 
     private val _state = MutableStateFlow(PlayerUiState())
@@ -116,6 +117,28 @@ class VideoPlayerViewModel(context: Context) : ViewModel() {
                         duration = player.duration.coerceAtLeast(0L),
                     )}
                 }
+            }
+        }
+
+        // Freeze watchdog — if position doesn't change for 4s while playing, force re-seek
+        viewModelScope.launch {
+            var lastPos = -1L
+            var stuckCount = 0
+            while (true) {
+                delay(2000)
+                val currentPos = player.currentPosition
+                val isActuallyPlaying = player.isPlaying && !player.isLoading
+                if (isActuallyPlaying && currentPos == lastPos && currentPos > 0) {
+                    stuckCount++
+                    if (stuckCount >= 2) { // stuck for ~4s
+                        // Force re-seek to current position to unstick the decoder
+                        player.seekTo(currentPos)
+                        stuckCount = 0
+                    }
+                } else {
+                    stuckCount = 0
+                }
+                lastPos = currentPos
             }
         }
     }

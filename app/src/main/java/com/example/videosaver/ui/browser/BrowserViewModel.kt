@@ -161,6 +161,20 @@ class BrowserViewModel(
         }
     }
 
+    /** Updates tags for a single file in-memory only (no full folder reload = scroll preserved). */
+    fun updateTagsInPlace(media: MediaFile, tags: List<String>) {
+        viewModelScope.launch {
+            repo.updateFileTags(media.file, tags)
+            val allKnown = repo.getAllKnownTags()
+            _state.update { st ->
+                val updated = st.mediaInCurrentDir.map { m ->
+                    if (m.file.absolutePath == media.file.absolutePath) m.copy(tags = tags) else m
+                }
+                st.copy(mediaInCurrentDir = updated, allKnownTags = allKnown)
+            }
+        }
+    }
+
     fun updateTagsForMultiple(files: List<MediaFile>, tagsToApply: List<String>) {
         viewModelScope.launch {
             files.forEach { media ->

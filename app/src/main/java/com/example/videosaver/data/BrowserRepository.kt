@@ -85,13 +85,14 @@ class BrowserRepository(
             mediaFilter     = parts.getOrNull(2).takeIf { it != "null" },
             sizeFilter      = parts.getOrNull(3).takeIf { it != "null" },
             dimensionFilter = parts.getOrNull(4).takeIf { it != "null" },
-            tagFilter       = parts.getOrNull(5).takeIf { it != "null" },
+            tagFilter       = null, // Never restored across sessions (reset on restart)
         )
     }
 
     fun saveFolderPrefs(dir: File, prefsObj: FolderPrefs) {
         val path = dir.absolutePath
-        val str = "${prefsObj.columns}|${prefsObj.sortBy}|${prefsObj.mediaFilter ?: "null"}|${prefsObj.sizeFilter ?: "null"}|${prefsObj.dimensionFilter ?: "null"}|${prefsObj.tagFilter ?: "null"}"
+        // tagFilter is intentionally NOT persisted (reset to null on every app restart)
+        val str = "${prefsObj.columns}|${prefsObj.sortBy}|${prefsObj.mediaFilter ?: "null"}|${prefsObj.sizeFilter ?: "null"}|${prefsObj.dimensionFilter ?: "null"}|null"
         prefs.edit().putString("pref_$path", str).apply()
     }
 

@@ -173,7 +173,7 @@ fun FolderBrowserScreen(
             allKnownTags = allKnownTags,
             onDismiss = { tagDialogMedia = null },
             onSave = { newTags ->
-                vm.updateFileTags(tagDialogMedia!!, newTags)
+                vm.updateTagsInPlace(tagDialogMedia!!, newTags)
                 tagDialogMedia = null
             }
         )
