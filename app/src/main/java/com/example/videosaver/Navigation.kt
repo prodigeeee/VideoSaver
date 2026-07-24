@@ -25,18 +25,10 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlin.math.roundToInt
-import com.example.videosaver.data.MediaFile
 import com.example.videosaver.theme.*
-import com.example.videosaver.ui.browser.FolderBrowserScreen
 import com.example.videosaver.ui.home.HomeScreen
 import com.example.videosaver.ui.library.LibraryScreen
 import com.example.videosaver.ui.settings.SettingsScreen
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.videosaver.ui.player.AudioPlayerViewModel
-import com.example.videosaver.ui.player.AudioPlayerUiState
-import com.example.videosaver.ui.player.LoopMode
 import androidx.compose.ui.text.style.TextOverflow
 
 private data class NavItem(
@@ -68,32 +60,15 @@ fun isInPipMode(): Boolean {
 
 @Composable
 fun MainNavigation() {
-    var currentRoute    by remember { mutableStateOf<Any>(Home) }
-    var videoPlayerDest by remember { mutableStateOf<VideoPlayer?>(null) }
-    
-    val audioVm: AudioPlayerViewModel = viewModel(factory = AudioPlayerViewModel.Factory(LocalContext.current))
-    val audioState by audioVm.state.collectAsStateWithLifecycle()
+    var currentRoute by remember { mutableStateOf<Any>(Home) }
 
     val navItems = listOf(
-        NavItem(Home,     Icons.Rounded.Home,         label = "Accueil"),
-        NavItem(Library,  Icons.Rounded.VideoLibrary, label = "Galerie"),
-        NavItem(Browser,  Icons.Rounded.FolderOpen,   label = "Fichiers"),
+        NavItem(Home,     Icons.Rounded.Download,     label = "Télécharger"),
+        NavItem(Library,  Icons.Rounded.VideoLibrary, label = "Fichiers"),
         NavItem(Settings, Icons.Rounded.Settings,     label = "Réglages"),
     )
 
-    var lastPlayerDest by remember { mutableStateOf<VideoPlayer?>(null) }
-    if (videoPlayerDest != null) {
-        lastPlayerDest = videoPlayerDest
-    }
-
-    LaunchedEffect(videoPlayerDest) {
-        MainActivity.isVideoPlayerActive = videoPlayerDest != null
-    }
-
     val inPip = isInPipMode()
-
-    var audioOffsetX by remember { mutableFloatStateOf(0f) }
-    var audioOffsetY by remember { mutableFloatStateOf(0f) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -118,81 +93,12 @@ fun MainNavigation() {
                 ) { route ->
                     when (route) {
                         is Home     -> HomeScreen()
-                        is Library  -> LibraryScreen(
-                            onPlayAudio = { playlist, startIndex ->
-                                audioVm.loadPlaylist(playlist, startIndex)
-                            }
-                        )
-                        is Browser  -> FolderBrowserScreen(
-                            onPlayMedia = { playlist, startIndex ->
-                                val media = playlist.getOrNull(startIndex)
-                                if (media?.isAudio == true) {
-                                    audioVm.loadPlaylist(playlist, startIndex)
-                                } else {
-                                    videoPlayerDest = VideoPlayer(playlist, startIndex)
-                                }
-                            },
-                        )
+                        is Library  -> LibraryScreen()
                         is Settings -> SettingsScreen()
                         else        -> HomeScreen()
                     }
                 }
             }
-        }
-
-        AnimatedVisibility(
-            visible = videoPlayerDest != null,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-        ) {
-            lastPlayerDest?.let { dest ->
-                val currentMedia = dest.playlist.getOrNull(dest.startIndex)
-                if (currentMedia?.isImage == true) {
-                    com.example.videosaver.ui.player.ImageViewerScreen(
-                        playlist   = dest.playlist,
-                        startIndex = dest.startIndex,
-                        onBack     = { videoPlayerDest = null },
-                    )
-                } else {
-                    com.example.videosaver.ui.player.VideoPlayerScreen(
-                        playlist   = dest.playlist,
-                        startIndex = dest.startIndex,
-                        onBack     = { videoPlayerDest = null },
-                    )
-                }
-            }
-        }
-
-        // ── Mini Audio Player ──────────────────────────────────────────────────
-        val audioPlayerBottomPadding = if (videoPlayerDest != null) 130.dp else 80.dp
-        AnimatedVisibility(
-            visible = audioState.isVisible && !inPip,
-            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = audioPlayerBottomPadding, start = 12.dp, end = 12.dp)
-                .offset { IntOffset(audioOffsetX.roundToInt(), audioOffsetY.roundToInt()) }
-                .pointerInput(Unit) {
-                    detectDragGestures { change, dragAmount ->
-                        change.consume()
-                        audioOffsetX += dragAmount.x
-                        audioOffsetY += dragAmount.y
-                    }
-                }
-        ) {
-            MiniAudioPlayer(
-                state = audioState,
-                onTogglePlay = audioVm::togglePlayPause,
-                onNext = audioVm::playNext,
-                onPrevious = audioVm::playPrevious,
-                onSeek = { audioVm.seekTo((it * audioState.duration).toLong()) },
-                onSkipForward = audioVm::skipForward,
-                onSkipBackward = audioVm::skipBackward,
-                onCycleLoop = audioVm::cycleLoopMode,
-                onClose = audioVm::stopAndHide,
-                onVolumeChange = audioVm::setVolume,
-            )
         }
     }
 }

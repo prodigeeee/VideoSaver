@@ -102,20 +102,10 @@ dependencies {
   implementation(libs.androidx.room.ktx)
   ksp(libs.androidx.room.compiler)
 
-  // Coil (image loading for thumbnails)
+  // Coil (image loading for download thumbnails)
   implementation(libs.coil.compose)
   implementation(libs.coil.okhttp)
-  implementation(libs.coil.video)
 
   // WorkManager (background download service)
   implementation(libs.androidx.work.runtime.ktx)
-
-  // Media3 / ExoPlayer (in-app video player with loop, aspect ratio)
-  implementation(libs.androidx.media3.exoplayer)
-  implementation(libs.androidx.media3.ui)
-  implementation(libs.androidx.media3.session)
-  implementation(libs.androidx.media3.common)
-
-  // ExifInterface for reading/writing EXIF metadata on image files
-  implementation("androidx.exifinterface:exifinterface:1.3.7")
 }

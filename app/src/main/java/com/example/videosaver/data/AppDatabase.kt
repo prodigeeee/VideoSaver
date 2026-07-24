@@ -7,15 +7,13 @@ import androidx.room.TypeConverters
 import android.content.Context
 
 @Database(
-    entities = [DownloadEntity::class, FolderEntity::class, FileTagEntity::class],
+    entities = [DownloadEntity::class],
     version = 4,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun downloadDao(): DownloadDao
-    abstract fun folderDao(): FolderDao
-    abstract fun fileTagDao(): FileTagDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
